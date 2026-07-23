@@ -13,8 +13,10 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   
-  // Modal states
+  // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [alertInfo, setAlertInfo] = useState(null); // { type: 'error' | 'success', title: '', message: '' }
+  const [confirmInfo, setConfirmInfo] = useState(null); // { g2gId, smmId, smmName, smmPrice }
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -22,7 +24,7 @@ export default function AdminDashboard() {
       setIsAuthenticated(true);
       fetchData();
     } else {
-      alert("Password salah!");
+      setAlertInfo({ type: 'error', title: 'Akses Ditolak', message: 'Password salah!' });
     }
   };
 
@@ -51,70 +53,86 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  const addMapping = async (e) => {
+  // Step 1: Validate
+  const initiateAddMapping = async (e) => {
     e.preventDefault();
     if (!newG2gId || !newSmmId) return;
     
     setIsAdding(true);
     
     try {
-      // 1. Fetch ALL services to cross-check the ID
       const servicesRes = await fetch("/api/smm-services");
       let servicesData = await servicesRes.json();
       
-      // Some SMM panels wrap the array in { status: true, data: [...] }
       if (servicesData && servicesData.data && Array.isArray(servicesData.data)) {
         servicesData = servicesData.data;
       }
       
       if (!servicesData || !Array.isArray(servicesData)) {
-        alert("Gagal membaca daftar layanan SMM Panel.\n\nDetail Respon API: " + JSON.stringify(servicesData).substring(0, 150));
+        setAlertInfo({ 
+          type: 'error', 
+          title: 'Koneksi SMM Gagal', 
+          message: 'Gagal membaca daftar layanan PusatPanelSMM.' 
+        });
         setIsAdding(false);
         return;
       }
 
-      // 2. Find the service (Some panels use 'id', some use 'service' as key)
       const matchedService = servicesData.find(s => String(s.service) === String(newSmmId) || String(s.id) === String(newSmmId));
       
       if (!matchedService) {
-        alert(`❌ ERROR: Layanan SMM dengan ID "${newSmmId}" TIDAK DITEMUKAN di PusatPanelSMM!`);
+        setAlertInfo({ 
+          type: 'error', 
+          title: 'ID Tidak Valid', 
+          message: `Layanan SMM dengan ID "${newSmmId}" TIDAK DITEMUKAN di PusatPanelSMM!` 
+        });
         setIsAdding(false);
         return;
       }
 
-      // 3. Confirm with the user
       const serviceName = matchedService.name || matchedService.judul || "Layanan Tidak Diketahui";
       const servicePrice = matchedService.rate || matchedService.harga || "0";
       
-      const isConfirmed = confirm(`✅ Layanan Ditemukan!\n\nNama: ${serviceName}\nHarga: Rp${servicePrice}/1000\n\nYakin ingin memasangkan G2G ${newG2gId} dengan layanan ini?`);
+      // Open Confirmation Modal instead of browser confirm()
+      setConfirmInfo({
+        g2gId: newG2gId,
+        smmId: newSmmId,
+        smmName: serviceName,
+        smmPrice: servicePrice
+      });
       
-      if (!isConfirmed) {
-        setIsAdding(false);
-        return;
-      }
+    } catch (error) {
+      setAlertInfo({ type: 'error', title: 'Kesalahan Sistem', message: 'Terjadi kesalahan saat proses validasi.' });
+    }
+    setIsAdding(false);
+  };
 
-      // 4. Save to Database
+  // Step 2: Execute after confirmation
+  const executeAddMapping = async () => {
+    if (!confirmInfo) return;
+    setAlertInfo({ type: 'success', title: 'Menyimpan...', message: 'Mohon tunggu sebentar.' });
+    
+    try {
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          g2gId: newG2gId, 
-          smmId: newSmmId,
-          smmName: serviceName
+          g2gId: confirmInfo.g2gId, 
+          smmId: confirmInfo.smmId,
+          smmName: confirmInfo.smmName
         })
       });
 
       if (res.ok) {
         setNewG2gId("");
         setNewSmmId("");
+        setAlertInfo(null);
+        setConfirmInfo(null);
         fetchData();
       }
     } catch (error) {
-      console.error("Failed to add mapping", error);
-      alert("Terjadi kesalahan saat validasi.");
+      setAlertInfo({ type: 'error', title: 'Gagal', message: 'Gagal menyimpan ke database.' });
     }
-    
-    setIsAdding(false);
   };
 
   const deleteMapping = async (g2gId) => {
@@ -130,6 +148,11 @@ export default function AdminDashboard() {
   if (!isAuthenticated) {
     return (
       <div className="auth-overlay">
+        {alertInfo && (
+          <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: 'var(--error)', padding: '1rem', borderRadius: '0.5rem', zIndex: 100}}>
+            {alertInfo.message}
+          </div>
+        )}
         <div className="auth-card">
           <h2 style={{justifyContent: 'center', marginBottom: '2rem'}}>🔒 Area Rahasia</h2>
           <form onSubmit={handleLogin} className="form-group">
@@ -188,7 +211,7 @@ export default function AdminDashboard() {
             Pasangkan ID Produk G2G dengan ID Layanan SMM Panel di sini.
           </p>
           
-          <form onSubmit={addMapping} style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem'}}>
+          <form onSubmit={initiateAddMapping} style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem'}}>
             <input 
               type="text" 
               placeholder="ID Produk G2G" 
@@ -226,17 +249,17 @@ export default function AdminDashboard() {
                 ) : (
                   Object.entries(mappings).map(([g2g, smm]) => (
                     <tr key={g2g}>
-                      <td style={{fontFamily: 'monospace', color: 'var(--accent)'}}>{g2g}</td>
+                      <td style={{fontFamily: 'monospace', color: 'var(--accent)', fontSize: '1.1rem'}}>{g2g}</td>
                       <td>
                         <strong>ID: {smm}</strong>
                         {names[g2g] && (
-                          <div style={{fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem'}}>
+                          <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem', lineHeight: '1.4'}}>
                             {names[g2g]}
                           </div>
                         )}
                       </td>
                       <td style={{textAlign: 'right'}}>
-                        <button className="danger" style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
+                        <button className="danger" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
                       </td>
                     </tr>
                   ))
@@ -250,10 +273,10 @@ export default function AdminDashboard() {
         <div className="card">
           <h2>📋 Riwayat Pesanan</h2>
           <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem'}}>
-            Log transaksi terbaru. Klik "Log" untuk bukti detail.
+            Log transaksi terbaru. Klik "Log API" untuk bukti detail.
           </p>
           
-          <div className="table-container" style={{maxHeight: '400px', overflowY: 'auto'}}>
+          <div className="table-container" style={{maxHeight: '500px', overflowY: 'auto'}}>
             <table>
               <thead>
                 <tr>
@@ -299,6 +322,60 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {confirmInfo && (
+        <div className="auth-overlay" onClick={() => setConfirmInfo(null)}>
+          <div className="auth-card" style={{ maxWidth: '600px', width: '90%', textAlign: 'center', cursor: 'default' }} onClick={e => e.stopPropagation()}>
+            <h2 style={{ color: 'var(--accent)', marginBottom: '0.5rem' }}>Konfirmasi Pasangan</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.9rem' }}>Mohon periksa kembali apakah ID G2G dan Layanan SMM sudah tepat.</p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+              {/* G2G Card */}
+              <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border)', textAlign: 'left' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem', letterSpacing: '0.05em' }}>Toko G2G</div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', fontFamily: 'monospace', color: 'white' }}>{confirmInfo.g2gId}</div>
+              </div>
+              
+              <div style={{ margin: '-1.5rem auto 0', zIndex: 2, backgroundColor: 'var(--bg)', padding: '0.5rem', borderRadius: '50%', border: '1px solid var(--border)' }}>
+                🔗
+              </div>
+
+              {/* SMM Card */}
+              <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border)', textAlign: 'left', marginTop: '-1.5rem' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem', letterSpacing: '0.05em' }}>Layanan SMM Panel (ID: {confirmInfo.smmId})</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--success)', marginBottom: '0.5rem', lineHeight: '1.4' }}>{confirmInfo.smmName}</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Harga: Rp {confirmInfo.smmPrice} / 1000</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button className="danger" style={{ flex: 1 }} onClick={() => setConfirmInfo(null)}>Batalkan</button>
+              <button style={{ flex: 1 }} onClick={executeAddMapping}>Simpan Pasangan</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alert Modal */}
+      {alertInfo && !confirmInfo && (
+        <div className="auth-overlay" onClick={() => setAlertInfo(null)}>
+          <div className="auth-card" style={{ maxWidth: '400px', width: '90%', textAlign: 'center', cursor: 'default' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>
+              {alertInfo.type === 'error' ? '❌' : '✅'}
+            </div>
+            <h2 style={{ color: alertInfo.type === 'error' ? 'var(--error)' : 'var(--success)', marginBottom: '1rem' }}>
+              {alertInfo.title}
+            </h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', lineHeight: '1.5' }}>
+              {alertInfo.message}
+            </p>
+            <button style={{ width: '100%' }} onClick={() => setAlertInfo(null)}>Tutup</button>
+          </div>
+        </div>
+      )}
+
+
 
       {/* Log Modal */}
       {selectedOrder && (
