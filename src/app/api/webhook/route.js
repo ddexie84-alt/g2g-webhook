@@ -53,7 +53,7 @@ export async function POST(req) {
       const offerId = payload.offer_id || (payload.products && payload.products[0] && payload.products[0].offer_id) || 'UNKNOWN_OFFER';
       
       // Fetch dynamic mappings from KV Database
-      const mappings = (await redis.hgetall("service_map")) || {};
+      const mappings = (await redis.hgetall("g2g_smm_mappings")) || {};
       const smmServiceId = mappings[offerId] || process.env.SMM_SERVICE_ID || mappings["DEFAULT"] || "1234";
 
       const smmApiKey = process.env.PUSATPANELSMM_API_KEY || 'API_KEY_SMM_ANDA';
@@ -100,6 +100,20 @@ export async function POST(req) {
         offerId: offerId,
         rawG2G: payload,          // Store raw G2G Payload
         rawSMM: smmRawResponse    // Store raw SMM Response
+      });
+    } else {
+      // Ini adalah event test atau pesanan belum dibayar, log agar muncul di dashboard
+      await saveOrderLog({
+        timestamp: new Date().toISOString(),
+        g2gOrderId: orderId || `TEST (${eventType})`,
+        targetLink: '-',
+        quantity: 0,
+        success: false,
+        offerId: '-',
+        rawG2G: payload,
+        rawSMM: { 
+          message: `Diabaikan. Sistem hanya memproses event 'order.confirmed' atau 'order.api_delivery'. Event yang masuk adalah: ${eventType}` 
+        }
       });
     }
 
