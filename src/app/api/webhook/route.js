@@ -60,6 +60,7 @@ export async function POST(req) {
       const smmSecretKey = process.env.PUSATPANELSMM_SECRET_KEY || 'SECRET_KEY_SMM_ANDA';
 
       let success = false;
+      let smmRawResponse = null;
 
       if (targetLink !== 'LINK_TIDAK_DITEMUKAN') {
         try {
@@ -77,6 +78,7 @@ export async function POST(req) {
           });
 
           const smmResult = await smmResponse.json();
+          smmRawResponse = smmResult; // Save the raw response
 
           if (smmResult.status === true || smmResult.data?.id) {
             success = true;
@@ -84,6 +86,7 @@ export async function POST(req) {
           }
         } catch (smmError) {
           console.error("SMM Error", smmError);
+          smmRawResponse = { error: smmError.toString() };
         }
       }
 
@@ -94,7 +97,9 @@ export async function POST(req) {
         targetLink: targetLink,
         quantity: quantity,
         success: success,
-        offerId: offerId
+        offerId: offerId,
+        rawG2G: payload,          // Store raw G2G Payload
+        rawSMM: smmRawResponse    // Store raw SMM Response
       });
     }
 

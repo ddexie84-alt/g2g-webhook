@@ -6,12 +6,14 @@ export default function AdminDashboard() {
   const [password, setPassword] = useState("");
   const [mappings, setMappings] = useState({});
   const [orders, setOrders] = useState([]);
+  const [profile, setProfile] = useState(null);
   const [newG2gId, setNewG2gId] = useState("");
   const [newSmmId, setNewSmmId] = useState("");
   const [loading, setLoading] = useState(true);
+  
+  // Modal states
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
-  // Simple client-side auth for demonstration
-  // In production, use proper authentication (e.g. NextAuth or middleware)
   const handleLogin = (e) => {
     e.preventDefault();
     if (password === "admin123") {
@@ -25,14 +27,21 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [mapsRes, ordersRes] = await Promise.all([
+      const [mapsRes, ordersRes, profileRes] = await Promise.all([
         fetch("/api/products"),
-        fetch("/api/orders")
+        fetch("/api/orders"),
+        fetch("/api/profile")
       ]);
       const mapsData = await mapsRes.json();
       const ordersData = await ordersRes.json();
+      const profileData = await profileRes.json();
+      
       setMappings(mapsData.mappings || {});
       setOrders(ordersData.orders || []);
+      
+      if (profileData.data) {
+        setProfile(profileData.data);
+      }
     } catch (error) {
       console.error("Failed to fetch data", error);
     }
@@ -94,9 +103,32 @@ export default function AdminDashboard() {
 
   return (
     <div className="container">
-      <header>
-        <h1>G2G Auto-Delivery</h1>
-        <p style={{color: 'var(--text-muted)'}}>Sistem Manajemen Toko Otomatis</p>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem', textAlign: 'left' }}>
+        <div>
+          <h1 style={{ marginBottom: '0' }}>G2G Auto-Delivery</h1>
+          <p style={{color: 'var(--text-muted)'}}>Sistem Manajemen Toko Otomatis</p>
+        </div>
+        
+        {/* Profile Widget */}
+        <div className="card" style={{ padding: '1rem 1.5rem', minWidth: '250px' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Status SMM Panel
+          </div>
+          {profile ? (
+            <div style={{ marginTop: '0.5rem' }}>
+              <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--success)' }}>
+                Rp {Number(profile.balance || 0).toLocaleString('id-ID')}
+              </div>
+              <div style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>
+                👤 {profile.username || 'User'}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--error)' }}>
+              ⚠️ Gagal mengambil saldo
+            </div>
+          )}
+        </div>
       </header>
 
       <div className="grid">
@@ -160,17 +192,17 @@ export default function AdminDashboard() {
         <div className="card">
           <h2>📋 Riwayat Pesanan</h2>
           <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem'}}>
-            Log transaksi terakhir dari webhook.
+            Log transaksi terbaru. Klik "Log" untuk bukti detail.
           </p>
           
           <div className="table-container" style={{maxHeight: '400px', overflowY: 'auto'}}>
             <table>
               <thead>
                 <tr>
-                  <th>Tanggal</th>
-                  <th>Order ID G2G</th>
-                  <th>Target</th>
-                  <th>Status SMM</th>
+                  <th>Waktu</th>
+                  <th>Order G2G</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -179,31 +211,66 @@ export default function AdminDashboard() {
                 ) : orders.length === 0 ? (
                   <tr><td colSpan="4" className="empty-state">Belum ada pesanan masuk.</td></tr>
                 ) : (
-                  orders.map((order, i) => (
-                    <tr key={i}>
-                      <td style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>
-                        {new Date(order.timestamp).toLocaleString('id-ID')}
-                      </td>
-                      <td style={{fontFamily: 'monospace'}}>{order.g2gOrderId}</td>
-                      <td>
-                        <div style={{maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                          {order.targetLink}
-                        </div>
-                        <div style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>Qty: {order.quantity}</div>
-                      </td>
-                      <td>
-                        <span className={`badge ${order.success ? 'success' : 'error'}`}>
-                          {order.success ? 'SUKSES' : 'ERROR'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  orders.map((order, i) => {
+                    const parsedOrder = typeof order === 'string' ? JSON.parse(order) : order;
+                    return (
+                      <tr key={i}>
+                        <td style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>
+                          {new Date(parsedOrder.timestamp).toLocaleTimeString('id-ID')}
+                        </td>
+                        <td style={{fontFamily: 'monospace'}}>{parsedOrder.g2gOrderId}</td>
+                        <td>
+                          <span className={`badge ${parsedOrder.success ? 'success' : 'error'}`}>
+                            {parsedOrder.success ? 'SUKSES' : 'ERROR'}
+                          </span>
+                        </td>
+                        <td>
+                          <button 
+                            style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)'}} 
+                            onClick={() => setSelectedOrder(parsedOrder)}
+                          >
+                            Log API
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+
+      {/* Log Modal */}
+      {selectedOrder && (
+        <div className="auth-overlay" onClick={() => setSelectedOrder(null)}>
+          <div className="auth-card" style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left', cursor: 'default' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ marginBottom: '0' }}>🔍 Detail Log Transaksi</h2>
+              <button className="danger" style={{ padding: '0.25rem 0.5rem' }} onClick={() => setSelectedOrder(null)}>Tutup</button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
+                <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--accent)' }}>📡 Data Masuk dari G2G (Payload)</h3>
+                <pre style={{ fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                  {JSON.stringify(selectedOrder.rawG2G || {}, null, 2)}
+                </pre>
+              </div>
+
+              <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
+                <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: selectedOrder.success ? 'var(--success)' : 'var(--error)' }}>
+                  🤖 Balasan dari SMM Panel
+                </h3>
+                <pre style={{ fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                  {JSON.stringify(selectedOrder.rawSMM || {}, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
