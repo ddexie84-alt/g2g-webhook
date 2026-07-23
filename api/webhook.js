@@ -10,38 +10,62 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Dapatkan signature dari Header HTTP yang dikirim G2G (nama header biasanya x-g2g-signature atau authorization)
     const signature = req.headers['x-g2g-signature'] || req.headers['authorization'];
-    
-    // 2. Ambil payload / data mentah dari body
     const payload = req.body;
     const rawPayload = JSON.stringify(payload);
 
-    // 3. Verifikasi Signature (Jika diperlukan untuk keamanan)
-    // Contoh membuat HMAC SHA256 (Sesuaikan dengan dokumentasi G2G nanti)
-    /*
-    const expectedSignature = crypto
-      .createHmac('sha256', G2G_WEBHOOK_SECRET)
-      .update(rawPayload)
-      .digest('hex');
-
-    if (signature !== expectedSignature) {
-      return res.status(401).json({ error: 'Unauthorized: Invalid signature' });
-    }
-    */
-
     // 4. Proses data berdasarkan event
-    const eventType = payload.event || payload.type; // Sesuaikan dengan struktur JSON G2G
+    const eventType = payload.event || payload.type; 
     
     console.log(`Menerima webhook event: ${eventType}`);
     console.log("Data pesanan:", payload);
 
     if (eventType === 'order.created') {
       console.log('Pesanan baru telah dibuat!');
-      // TODO: Logika kurangi stok di database internal, atau siapkan kode voucher
+      // Anda bisa log data atau skip
     } else if (eventType === 'order.confirmed') {
       console.log('Pesanan dikonfirmasi oleh pembeli/pembayaran berhasil!');
-      // TODO: Logika mengirimkan API Deliver Code ke G2G
+      
+      // 1. Ekstrak Target Link/Username dari Data G2G
+      const targetLink = payload.buyer_note || 'LINK_TIDAK_DITEMUKAN'; 
+      const quantity = payload.quantity || 100;
+
+      console.log(`Mencoba order SMM Panel untuk link: ${targetLink} sebanyak ${quantity}`);
+
+      // 2. Tembak API Pusat Panel SMM
+      // Mendukung nama variabel SMM_API_KEY atau PUSATPANELSMM_API_KEY
+      const smmApiKey = process.env.SMM_API_KEY || process.env.PUSATPANELSMM_API_KEY || 'API_KEY_SMM_ANDA';
+      const smmServiceId = process.env.SMM_SERVICE_ID || '1234'; // Ganti dengan Service ID Followers TikTok
+
+      if (targetLink !== 'LINK_TIDAK_DITEMUKAN') {
+        try {
+          const smmResponse = await fetch('https://pusatpanelsmm.com/api/v2', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              key: smmApiKey,
+              action: 'add',
+              service: smmServiceId,
+              link: targetLink,
+              quantity: quantity.toString()
+            })
+          });
+
+          const smmResult = await smmResponse.json();
+          console.log("Respon dari SMM Panel:", smmResult);
+
+          if (smmResult.order) {
+            console.log(`Sukses order ke SMM Panel dengan Order ID: ${smmResult.order}`);
+            // (Opsional) Tembak API G2G untuk Deliver Code bisa ditambahkan di sini nanti
+          } else {
+            console.error("Gagal order SMM Panel:", smmResult);
+          }
+        } catch (smmError) {
+          console.error("Error saat menghubungi SMM Panel:", smmError);
+        }
+      } else {
+        console.log("Link target tidak ditemukan di pesanan G2G. Melewati order SMM.");
+      }
     }
 
     // 5. Beri tahu G2G bahwa server kita sukses memproses datanya (HTTP 200 OK)
@@ -52,7 +76,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Gagal memproses webhook:", error);
-    // Jika ada error internal server, berikan HTTP 500
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
