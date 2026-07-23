@@ -43,9 +43,12 @@ async function deliverG2GOrder(orderId) {
 
 export async function POST(req) {
   try {
-    const payload = await req.json();
-    const eventType = payload.event || payload.type || 'UNKNOWN_EVENT'; 
-    const orderId = payload.order_id || payload.id;
+    const rawBody = await req.json();
+    const eventType = rawBody.event || rawBody.type || rawBody.event_type || 'UNKNOWN_EVENT'; 
+    
+    // G2G webhooks often wrap the data inside a 'payload' object
+    const payload = rawBody.payload || rawBody;
+    const orderId = payload.order_id || payload.id || rawBody.id;
 
     // 1. Ekstraksi Data dari G2G
     const offerId = payload.offer_id || (payload.products && payload.products[0] && payload.products[0].offer_id) || 'UNKNOWN_OFFER';
@@ -115,7 +118,7 @@ export async function POST(req) {
       smmServiceId: smmServiceId,     // <--- DATA BARU UNTUK LOG
       purchasedQty: purchasedQty,     // <--- DATA BARU UNTUK LOG
       baseSmmQty: baseSmmQty,         // <--- DATA BARU UNTUK LOG
-      rawG2G: payload,                // Store raw G2G Payload
+      rawG2G: rawBody,                // Store FULL raw G2G Payload
       rawSMM: smmRawResponse          // Store raw SMM Response
     });
 
