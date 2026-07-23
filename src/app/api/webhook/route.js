@@ -59,8 +59,11 @@ export async function POST(req) {
     const mappings = (await redis.hgetall("g2g_smm_mappings")) || {};
     const quantities = (await redis.hgetall("g2g_smm_qty")) || {};
     
-    const smmServiceId = mappings[offerId] || process.env.SMM_SERVICE_ID || mappings["DEFAULT"] || "BELUM_DIPETAKAN";
-    const baseSmmQty = parseInt(quantities[offerId] || "1000", 10);
+    // G2G webhooks kirim ID tanpa "#", tapi user mungkin menyimpan dengan "#" di Dashboard
+    const cleanOfferId = offerId.replace(/^#/, '');
+    
+    const smmServiceId = mappings[cleanOfferId] || mappings[`#${cleanOfferId}`] || process.env.SMM_SERVICE_ID || mappings["DEFAULT"] || "BELUM_DIPETAKAN";
+    const baseSmmQty = parseInt(quantities[cleanOfferId] || quantities[`#${cleanOfferId}`] || "1000", 10);
     const totalSmmQuantity = purchasedQty * baseSmmQty;
 
     let success = false;

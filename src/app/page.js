@@ -144,7 +144,7 @@ export default function AdminDashboard() {
   const deleteMapping = async (g2gId) => {
     if (!confirm("Hapus produk ini?")) return;
     try {
-      const res = await fetch(`/api/products?id=${g2gId}`, { method: "DELETE" });
+      const res = await fetch(`/api/products?id=${encodeURIComponent(g2gId)}`, { method: "DELETE" });
       if (res.ok) fetchData();
     } catch (error) {
       console.error("Failed to delete mapping", error);
