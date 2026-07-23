@@ -1,0 +1,8 @@
+{
+  "name": "g2g-webhook",
+  "version": "1.0.0",
+  "description": "Vercel Webhook receiver for G2G",
+  "scripts": {
+    "start": "node api/webhook.js"
+  }
+}
