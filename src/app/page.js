@@ -60,16 +60,21 @@ export default function AdminDashboard() {
     try {
       // 1. Fetch ALL services to cross-check the ID
       const servicesRes = await fetch("/api/smm-services");
-      const servicesData = await servicesRes.json();
+      let servicesData = await servicesRes.json();
+      
+      // Some SMM panels wrap the array in { status: true, data: [...] }
+      if (servicesData && servicesData.data && Array.isArray(servicesData.data)) {
+        servicesData = servicesData.data;
+      }
       
       if (!servicesData || !Array.isArray(servicesData)) {
-        alert("Gagal menghubungi SMM Panel untuk validasi. Silakan coba lagi.");
+        alert("Gagal membaca daftar layanan SMM Panel.\n\nDetail Respon API: " + JSON.stringify(servicesData).substring(0, 150));
         setIsAdding(false);
         return;
       }
 
-      // 2. Find the service
-      const matchedService = servicesData.find(s => String(s.service) === String(newSmmId));
+      // 2. Find the service (Some panels use 'id', some use 'service' as key)
+      const matchedService = servicesData.find(s => String(s.service) === String(newSmmId) || String(s.id) === String(newSmmId));
       
       if (!matchedService) {
         alert(`❌ ERROR: Layanan SMM dengan ID "${newSmmId}" TIDAK DITEMUKAN di PusatPanelSMM!`);
@@ -78,7 +83,10 @@ export default function AdminDashboard() {
       }
 
       // 3. Confirm with the user
-      const isConfirmed = confirm(`✅ Layanan Ditemukan!\n\nNama: ${matchedService.name}\nHarga: Rp${matchedService.rate}/1000\n\nYakin ingin memasangkan G2G ${newG2gId} dengan layanan ini?`);
+      const serviceName = matchedService.name || matchedService.judul || "Layanan Tidak Diketahui";
+      const servicePrice = matchedService.rate || matchedService.harga || "0";
+      
+      const isConfirmed = confirm(`✅ Layanan Ditemukan!\n\nNama: ${serviceName}\nHarga: Rp${servicePrice}/1000\n\nYakin ingin memasangkan G2G ${newG2gId} dengan layanan ini?`);
       
       if (!isConfirmed) {
         setIsAdding(false);
@@ -92,7 +100,7 @@ export default function AdminDashboard() {
         body: JSON.stringify({ 
           g2gId: newG2gId, 
           smmId: newSmmId,
-          smmName: matchedService.name
+          smmName: serviceName
         })
       });
 
