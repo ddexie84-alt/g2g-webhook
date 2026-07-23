@@ -5,11 +5,13 @@ export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [mappings, setMappings] = useState({});
+  const [names, setNames] = useState({});
   const [orders, setOrders] = useState([]);
   const [profile, setProfile] = useState(null);
   const [newG2gId, setNewG2gId] = useState("");
   const [newSmmId, setNewSmmId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
   
   // Modal states
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -37,6 +39,7 @@ export default function AdminDashboard() {
       const profileData = await profileRes.json();
       
       setMappings(mapsData.mappings || {});
+      setNames(mapsData.names || {});
       setOrders(ordersData.orders || []);
       
       if (profileData.data) {
@@ -52,12 +55,47 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!newG2gId || !newSmmId) return;
     
+    setIsAdding(true);
+    
     try {
+      // 1. Fetch ALL services to cross-check the ID
+      const servicesRes = await fetch("/api/smm-services");
+      const servicesData = await servicesRes.json();
+      
+      if (!servicesData || !Array.isArray(servicesData)) {
+        alert("Gagal menghubungi SMM Panel untuk validasi. Silakan coba lagi.");
+        setIsAdding(false);
+        return;
+      }
+
+      // 2. Find the service
+      const matchedService = servicesData.find(s => String(s.service) === String(newSmmId));
+      
+      if (!matchedService) {
+        alert(`❌ ERROR: Layanan SMM dengan ID "${newSmmId}" TIDAK DITEMUKAN di PusatPanelSMM!`);
+        setIsAdding(false);
+        return;
+      }
+
+      // 3. Confirm with the user
+      const isConfirmed = confirm(`✅ Layanan Ditemukan!\n\nNama: ${matchedService.name}\nHarga: Rp${matchedService.rate}/1000\n\nYakin ingin memasangkan G2G ${newG2gId} dengan layanan ini?`);
+      
+      if (!isConfirmed) {
+        setIsAdding(false);
+        return;
+      }
+
+      // 4. Save to Database
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ g2gId: newG2gId, smmId: newSmmId })
+        body: JSON.stringify({ 
+          g2gId: newG2gId, 
+          smmId: newSmmId,
+          smmName: matchedService.name
+        })
       });
+
       if (res.ok) {
         setNewG2gId("");
         setNewSmmId("");
@@ -65,7 +103,10 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error("Failed to add mapping", error);
+      alert("Terjadi kesalahan saat validasi.");
     }
+    
+    setIsAdding(false);
   };
 
   const deleteMapping = async (g2gId) => {
@@ -155,7 +196,9 @@ export default function AdminDashboard() {
               style={{width: '150px'}}
               required
             />
-            <button type="submit">Tambah</button>
+            <button type="submit" disabled={isAdding}>
+              {isAdding ? '⏳ Mengecek...' : 'Tambah'}
+            </button>
           </form>
 
           <div className="table-container">
@@ -163,7 +206,7 @@ export default function AdminDashboard() {
               <thead>
                 <tr>
                   <th>ID Produk G2G</th>
-                  <th>ID SMM</th>
+                  <th>Layanan SMM Panel</th>
                   <th style={{textAlign: 'right'}}>Aksi</th>
                 </tr>
               </thead>
@@ -176,7 +219,14 @@ export default function AdminDashboard() {
                   Object.entries(mappings).map(([g2g, smm]) => (
                     <tr key={g2g}>
                       <td style={{fontFamily: 'monospace', color: 'var(--accent)'}}>{g2g}</td>
-                      <td><strong>{smm}</strong></td>
+                      <td>
+                        <strong>ID: {smm}</strong>
+                        {names[g2g] && (
+                          <div style={{fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem'}}>
+                            {names[g2g]}
+                          </div>
+                        )}
+                      </td>
                       <td style={{textAlign: 'right'}}>
                         <button className="danger" style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
                       </td>
