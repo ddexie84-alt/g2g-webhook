@@ -408,6 +408,34 @@ export default function AdminDashboard() {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              
+              {/* Papan Rute / Routing Board */}
+              {selectedOrder.smmServiceId && (
+                <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid var(--border)', display: 'flex', gap: '2rem', alignItems: 'center' }}>
+                  <div style={{flex: 1}}>
+                    <div style={{fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem'}}>Produk G2G</div>
+                    <div style={{fontWeight: 'bold', color: 'white', fontFamily: 'monospace', fontSize: '1.2rem'}}>{selectedOrder.offerId}</div>
+                  </div>
+                  
+                  <div style={{fontSize: '1.5rem'}}>➔</div>
+                  
+                  <div style={{flex: 1}}>
+                    <div style={{fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem'}}>SMM Panel ID</div>
+                    <div style={{fontWeight: 'bold', color: 'var(--success)', fontFamily: 'monospace', fontSize: '1.2rem'}}>{selectedOrder.smmServiceId}</div>
+                  </div>
+                  
+                  <div style={{fontSize: '1.5rem'}}>🧮</div>
+                  
+                  <div style={{flex: 1}}>
+                    <div style={{fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem'}}>Total Kirim (Qty)</div>
+                    <div style={{fontWeight: 'bold', fontFamily: 'monospace', fontSize: '1.2rem'}}>
+                      <span style={{color: 'var(--text-muted)'}}>{selectedOrder.purchasedQty || 1} x {selectedOrder.baseSmmQty || '?'} = </span> 
+                      <span style={{color: 'var(--primary)'}}>{selectedOrder.quantity}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
                 <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--accent)' }}>📡 Data Masuk dari G2G (Payload)</h3>
                 <pre style={{ fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-muted)', fontFamily: 'monospace' }}>

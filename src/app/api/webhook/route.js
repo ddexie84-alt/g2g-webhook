@@ -44,29 +44,29 @@ async function deliverG2GOrder(orderId) {
 export async function POST(req) {
   try {
     const payload = await req.json();
-    const eventType = payload.event || payload.type; 
+    const eventType = payload.event || payload.type || 'UNKNOWN_EVENT'; 
     const orderId = payload.order_id || payload.id;
 
-    if (eventType === 'order.confirmed' || eventType === 'order.api_delivery') {
-      const targetLink = payload.buyer_note || 'LINK_TIDAK_DITEMUKAN'; 
-      const offerId = payload.offer_id || (payload.products && payload.products[0] && payload.products[0].offer_id) || 'UNKNOWN_OFFER';
-      
-      // Fetch dynamic mappings from KV Database
-      const mappings = (await redis.hgetall("g2g_smm_mappings")) || {};
-      const quantities = (await redis.hgetall("g2g_smm_qty")) || {};
-      
-      const smmServiceId = mappings[offerId] || process.env.SMM_SERVICE_ID || mappings["DEFAULT"] || "1234";
-      
-      // Calculate Total Quantity to send to SMM Panel
-      const baseSmmQty = parseInt(quantities[offerId] || "1000", 10);
-      const purchasedQty = parseInt(payload.purchased_qty || payload.quantity || 1, 10);
-      const totalSmmQuantity = purchasedQty * baseSmmQty;
+    // 1. Ekstraksi Data dari G2G
+    const offerId = payload.offer_id || (payload.products && payload.products[0] && payload.products[0].offer_id) || 'UNKNOWN_OFFER';
+    const targetLink = payload.buyer_note || 'LINK_TIDAK_DITEMUKAN'; 
+    const purchasedQty = parseInt(payload.purchased_qty || payload.quantity || 1, 10);
 
+    // 2. Lookup Pemetaan di Database
+    const mappings = (await redis.hgetall("g2g_smm_mappings")) || {};
+    const quantities = (await redis.hgetall("g2g_smm_qty")) || {};
+    
+    const smmServiceId = mappings[offerId] || process.env.SMM_SERVICE_ID || mappings["DEFAULT"] || "BELUM_DIPETAKAN";
+    const baseSmmQty = parseInt(quantities[offerId] || "1000", 10);
+    const totalSmmQuantity = purchasedQty * baseSmmQty;
+
+    let success = false;
+    let smmRawResponse = null;
+
+    // 3. Eksekusi jika pesanan lunas
+    if (eventType === 'order.confirmed' || eventType === 'order.api_delivery') {
       const smmApiKey = process.env.PUSATPANELSMM_API_KEY || 'API_KEY_SMM_ANDA';
       const smmSecretKey = process.env.PUSATPANELSMM_SECRET_KEY || 'SECRET_KEY_SMM_ANDA';
-
-      let success = false;
-      let smmRawResponse = null;
 
       if (targetLink !== 'LINK_TIDAK_DITEMUKAN') {
         try {
@@ -94,37 +94,34 @@ export async function POST(req) {
           console.error("SMM Error", smmError);
           smmRawResponse = { error: smmError.toString() };
         }
+      } else {
+        smmRawResponse = { error: "Link Target tidak ditemukan dari G2G (buyer_note kosong)" };
       }
-
-      // Save order record to KV for the Dashboard
-      await saveOrderLog({
-        timestamp: new Date().toISOString(),
-        g2gOrderId: orderId || 'UNKNOWN',
-        targetLink: targetLink,
-        quantity: totalSmmQuantity,
-        success: success,
-        offerId: offerId,
-        rawG2G: payload,          // Store raw G2G Payload
-        rawSMM: smmRawResponse    // Store raw SMM Response
-      });
     } else {
-      // Ini adalah event test atau pesanan belum dibayar, log agar muncul di dashboard
-      await saveOrderLog({
-        timestamp: new Date().toISOString(),
-        g2gOrderId: orderId || `TEST (${eventType})`,
-        targetLink: '-',
-        quantity: 0,
-        success: false,
-        offerId: '-',
-        rawG2G: payload,
-        rawSMM: { 
-          message: `Diabaikan. Sistem hanya memproses event 'order.confirmed' atau 'order.api_delivery'. Event yang masuk adalah: ${eventType}` 
-        }
-      });
+      // Ini adalah event test atau pesanan belum dibayar.
+      smmRawResponse = { 
+        message: `[SIMULASI BERHASIL] Pesanan '${eventType}' terdeteksi. Karena belum lunas, pesanan tidak diteruskan. Jika lunas, sistem akan otomatis mengirimkannya ke SMM ID: ${smmServiceId} dengan Jumlah: ${totalSmmQuantity}` 
+      };
     }
+
+    // 4. Save order record to KV for the Dashboard (Selalu dicatat apapun eventnya)
+    await saveOrderLog({
+      timestamp: new Date().toISOString(),
+      g2gOrderId: orderId || `TEST (${eventType})`,
+      targetLink: targetLink,
+      quantity: totalSmmQuantity,
+      success: success,
+      offerId: offerId,
+      smmServiceId: smmServiceId,     // <--- DATA BARU UNTUK LOG
+      purchasedQty: purchasedQty,     // <--- DATA BARU UNTUK LOG
+      baseSmmQty: baseSmmQty,         // <--- DATA BARU UNTUK LOG
+      rawG2G: payload,                // Store raw G2G Payload
+      rawSMM: smmRawResponse          // Store raw SMM Response
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("Webhook Error", error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
