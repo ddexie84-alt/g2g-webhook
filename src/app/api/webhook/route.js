@@ -52,7 +52,17 @@ export async function POST(req) {
 
     // 1. Ekstraksi Data dari G2G
     const offerId = payload.offer_id || (payload.products && payload.products[0] && payload.products[0].offer_id) || 'UNKNOWN_OFFER';
-    const targetLink = payload.buyer_note || 'LINK_TIDAK_DITEMUKAN'; 
+    
+    // G2G menyimpan link di tempat yang berbeda tergantung eventnya (buyer_note atau delivery_summary)
+    let targetLink = payload.buyer_note;
+    if (!targetLink && payload.delivery_summary && Array.isArray(payload.delivery_summary.delivery_method_list)) {
+      const method = payload.delivery_summary.delivery_method_list[0];
+      if (method && method.value) {
+        targetLink = method.value;
+      }
+    }
+    targetLink = targetLink || 'LINK_TIDAK_DITEMUKAN';
+    
     const purchasedQty = parseInt(payload.purchased_qty || payload.quantity || 1, 10);
 
     // 2. Lookup Pemetaan di Database
