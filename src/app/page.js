@@ -6,17 +6,19 @@ export default function AdminDashboard() {
   const [password, setPassword] = useState("");
   const [mappings, setMappings] = useState({});
   const [names, setNames] = useState({});
+  const [quantities, setQuantities] = useState({});
   const [orders, setOrders] = useState([]);
   const [profile, setProfile] = useState(null);
   const [newG2gId, setNewG2gId] = useState("");
   const [newSmmId, setNewSmmId] = useState("");
+  const [newSmmQty, setNewSmmQty] = useState("");
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   
   // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [alertInfo, setAlertInfo] = useState(null); // { type: 'error' | 'success', title: '', message: '' }
-  const [confirmInfo, setConfirmInfo] = useState(null); // { g2gId, smmId, smmName, smmPrice }
+  const [confirmInfo, setConfirmInfo] = useState(null); // { g2gId, smmId, smmName, smmPrice, smmQty }
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -42,6 +44,7 @@ export default function AdminDashboard() {
       
       setMappings(mapsData.mappings || {});
       setNames(mapsData.names || {});
+      setQuantities(mapsData.quantities || {});
       setOrders(ordersData.orders || []);
       
       if (profileData.data) {
@@ -56,7 +59,7 @@ export default function AdminDashboard() {
   // Step 1: Validate
   const initiateAddMapping = async (e) => {
     e.preventDefault();
-    if (!newG2gId || !newSmmId) return;
+    if (!newG2gId || !newSmmId || !newSmmQty) return;
     
     setIsAdding(true);
     
@@ -98,7 +101,8 @@ export default function AdminDashboard() {
         g2gId: newG2gId,
         smmId: newSmmId,
         smmName: serviceName,
-        smmPrice: servicePrice
+        smmPrice: servicePrice,
+        smmQty: newSmmQty
       });
       
     } catch (error) {
@@ -119,13 +123,15 @@ export default function AdminDashboard() {
         body: JSON.stringify({ 
           g2gId: confirmInfo.g2gId, 
           smmId: confirmInfo.smmId,
-          smmName: confirmInfo.smmName
+          smmName: confirmInfo.smmName,
+          smmQty: confirmInfo.smmQty
         })
       });
 
       if (res.ok) {
         setNewG2gId("");
         setNewSmmId("");
+        setNewSmmQty("");
         setAlertInfo(null);
         setConfirmInfo(null);
         fetchData();
@@ -208,27 +214,36 @@ export default function AdminDashboard() {
         <div className="card">
           <h2>📦 Pengelola Produk</h2>
           <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem'}}>
-            Pasangkan ID Produk G2G dengan ID Layanan SMM Panel di sini.
+            Pasangkan ID Produk G2G dengan ID Layanan SMM Panel beserta Pengali Jumlahnya.
           </p>
           
           <form onSubmit={initiateAddMapping} style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem'}}>
             <input 
               type="text" 
-              placeholder="ID Produk G2G" 
+              placeholder="ID G2G" 
               value={newG2gId}
               onChange={(e) => setNewG2gId(e.target.value)}
+              style={{flex: 2}}
               required
             />
             <input 
               type="text" 
-              placeholder="ID SMM Panel" 
+              placeholder="ID SMM" 
               value={newSmmId}
               onChange={(e) => setNewSmmId(e.target.value)}
-              style={{width: '150px'}}
+              style={{flex: 1}}
+              required
+            />
+            <input 
+              type="number" 
+              placeholder="Jmlh (Cth: 1000)" 
+              value={newSmmQty}
+              onChange={(e) => setNewSmmQty(e.target.value)}
+              style={{flex: 1}}
               required
             />
             <button type="submit" disabled={isAdding}>
-              {isAdding ? '⏳ Mengecek...' : 'Tambah'}
+              {isAdding ? '⏳...' : 'Tambah'}
             </button>
           </form>
 
@@ -251,7 +266,10 @@ export default function AdminDashboard() {
                     <tr key={g2g}>
                       <td style={{fontFamily: 'monospace', color: 'var(--accent)', fontSize: '1.1rem'}}>{g2g}</td>
                       <td>
-                        <strong>ID: {smm}</strong>
+                        <strong>ID: {smm}</strong> 
+                        <span style={{marginLeft: '8px', fontSize: '0.8rem', backgroundColor: 'var(--primary)', padding: '2px 6px', borderRadius: '4px', color: 'white'}}>
+                          Qty: {quantities[g2g] || 1000}
+                        </span>
                         {names[g2g] && (
                           <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem', lineHeight: '1.4'}}>
                             {names[g2g]}
@@ -276,7 +294,7 @@ export default function AdminDashboard() {
             Log transaksi terbaru. Klik "Log API" untuk bukti detail.
           </p>
           
-          <div className="table-container" style={{maxHeight: '500px', overflowY: 'auto'}}>
+          <div className="table-container" style={{maxHeight: '400px', overflowY: 'auto'}}>
             <table>
               <thead>
                 <tr>
@@ -328,7 +346,7 @@ export default function AdminDashboard() {
         <div className="auth-overlay" onClick={() => setConfirmInfo(null)}>
           <div className="auth-card" style={{ maxWidth: '600px', width: '90%', textAlign: 'center', cursor: 'default' }} onClick={e => e.stopPropagation()}>
             <h2 style={{ color: 'var(--accent)', marginBottom: '0.5rem' }}>Konfirmasi Pasangan</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.9rem' }}>Mohon periksa kembali apakah ID G2G dan Layanan SMM sudah tepat.</p>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.9rem' }}>Sistem akan mengalikan Qty G2G dengan Jumlah SMM di bawah ini.</p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
               {/* G2G Card */}
@@ -343,9 +361,12 @@ export default function AdminDashboard() {
 
               {/* SMM Card */}
               <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border)', textAlign: 'left', marginTop: '-1.5rem' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem', letterSpacing: '0.05em' }}>Layanan SMM Panel (ID: {confirmInfo.smmId})</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem', letterSpacing: '0.05em' }}>Layanan SMM Panel (ID: {confirmInfo.smmId})</div>
+                  <div style={{ fontSize: '0.9rem', color: 'white', backgroundColor: 'var(--primary)', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold' }}>x {confirmInfo.smmQty}</div>
+                </div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--success)', marginBottom: '0.5rem', lineHeight: '1.4' }}>{confirmInfo.smmName}</div>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Harga: Rp {confirmInfo.smmPrice} / 1000</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Harga Modal: Rp {confirmInfo.smmPrice} / 1000</div>
               </div>
             </div>
 

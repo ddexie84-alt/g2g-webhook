@@ -10,7 +10,8 @@ export async function GET() {
   try {
     const mappings = await redis.hgetall('g2g_smm_mappings') || {};
     const names = await redis.hgetall('g2g_smm_names') || {};
-    return NextResponse.json({ mappings, names });
+    const quantities = await redis.hgetall('g2g_smm_qty') || {};
+    return NextResponse.json({ mappings, names, quantities });
   } catch (error) {
     console.error("KV GET Error:", error);
     return NextResponse.json({ error: "Failed to fetch mappings" }, { status: 500 });
@@ -19,12 +20,17 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { g2gId, smmId, smmName } = await request.json();
+    const { g2gId, smmId, smmName, smmQty } = await request.json();
     if (!g2gId || !smmId) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     
     await redis.hset('g2g_smm_mappings', { [g2gId]: smmId });
     if (smmName) {
       await redis.hset('g2g_smm_names', { [g2gId]: smmName });
+    }
+    if (smmQty) {
+      await redis.hset('g2g_smm_qty', { [g2gId]: smmQty.toString() });
+    } else {
+      await redis.hset('g2g_smm_qty', { [g2gId]: "100" }); // Default fallback
     }
     
     return NextResponse.json({ success: true });
@@ -42,6 +48,7 @@ export async function DELETE(request) {
     
     await redis.hdel('g2g_smm_mappings', id);
     await redis.hdel('g2g_smm_names', id);
+    await redis.hdel('g2g_smm_qty', id);
     
     return NextResponse.json({ success: true });
   } catch (error) {

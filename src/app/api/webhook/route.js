@@ -49,12 +49,18 @@ export async function POST(req) {
 
     if (eventType === 'order.confirmed' || eventType === 'order.api_delivery') {
       const targetLink = payload.buyer_note || 'LINK_TIDAK_DITEMUKAN'; 
-      const quantity = payload.quantity || 100;
       const offerId = payload.offer_id || (payload.products && payload.products[0] && payload.products[0].offer_id) || 'UNKNOWN_OFFER';
       
       // Fetch dynamic mappings from KV Database
       const mappings = (await redis.hgetall("g2g_smm_mappings")) || {};
+      const quantities = (await redis.hgetall("g2g_smm_qty")) || {};
+      
       const smmServiceId = mappings[offerId] || process.env.SMM_SERVICE_ID || mappings["DEFAULT"] || "1234";
+      
+      // Calculate Total Quantity to send to SMM Panel
+      const baseSmmQty = parseInt(quantities[offerId] || "1000", 10);
+      const purchasedQty = parseInt(payload.purchased_qty || payload.quantity || 1, 10);
+      const totalSmmQuantity = purchasedQty * baseSmmQty;
 
       const smmApiKey = process.env.PUSATPANELSMM_API_KEY || 'API_KEY_SMM_ANDA';
       const smmSecretKey = process.env.PUSATPANELSMM_SECRET_KEY || 'SECRET_KEY_SMM_ANDA';
@@ -73,7 +79,7 @@ export async function POST(req) {
               action: 'order', 
               service: smmServiceId,
               data: targetLink, 
-              quantity: quantity.toString()
+              quantity: totalSmmQuantity.toString()
             }).toString()
           });
 
@@ -95,7 +101,7 @@ export async function POST(req) {
         timestamp: new Date().toISOString(),
         g2gOrderId: orderId || 'UNKNOWN',
         targetLink: targetLink,
-        quantity: quantity,
+        quantity: totalSmmQuantity,
         success: success,
         offerId: offerId,
         rawG2G: payload,          // Store raw G2G Payload
