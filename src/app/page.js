@@ -307,16 +307,6 @@ export default function AdminDashboard() {
             </button>
           </div>
           
-            </div>
-            <button 
-              onClick={syncG2G} 
-              disabled={isSyncing}
-              style={{ backgroundColor: 'var(--success)', border: 'none', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-            >
-              {isSyncing ? '⏳ Menyinkronkan...' : '🔄 Tarik Data dari G2G'}
-            </button>
-          </div>
-          
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--accent)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
             <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--accent)' }}>✏️ Form Tambah / Edit Pemetaan</h3>
             <form onSubmit={initiateAddMapping} style={{display: 'flex', gap: '0.5rem'}}>
@@ -349,33 +339,6 @@ export default function AdminDashboard() {
               </button>
             </form>
           </div>
-              type="text" 
-              placeholder="ID G2G" 
-              value={newG2gId}
-              onChange={(e) => setNewG2gId(e.target.value)}
-              style={{flex: 2}}
-              required
-            />
-            <input 
-              type="text" 
-              placeholder="ID SMM" 
-              value={newSmmId}
-              onChange={(e) => setNewSmmId(e.target.value)}
-              style={{flex: 1}}
-              required
-            />
-            <input 
-              type="number" 
-              placeholder="Jmlh (Cth: 1000)" 
-              value={newSmmQty}
-              onChange={(e) => setNewSmmQty(e.target.value)}
-              style={{flex: 1}}
-              required
-            />
-            <button type="submit" disabled={isAdding}>
-              {isAdding ? '⏳...' : 'Tambah'}
-            </button>
-          </form>
 
           <div style={{ marginBottom: '2rem' }}>
             <h3 style={{ marginBottom: '1rem', color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -496,6 +459,7 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
+        </div>
         </div>
 
         {/* Right Column: Order History */}
