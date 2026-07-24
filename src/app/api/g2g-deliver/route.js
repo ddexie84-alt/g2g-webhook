@@ -106,9 +106,8 @@ export async function POST(req) {
 
     const data = await response.json();
     
-    if (!response.ok || (data.code !== undefined && String(data.code) !== "1")) {
-       if (!response.ok) throw new Error(data.message || JSON.stringify(data));
-       return NextResponse.json({ error: data.message || "Gagal mengubah status di G2G.", details: data }, { status: 400 });
+    if (!response.ok || (data.code !== undefined && String(data.code) !== "20000001")) {
+       return NextResponse.json({ error: `Gagal mengubah status di G2G: ${JSON.stringify(data)}` }, { status: 400 });
     }
 
     return NextResponse.json({ success: true, data });

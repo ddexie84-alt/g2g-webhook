@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   const [searchPemetaan, setSearchPemetaan] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [updatingOfferId, setUpdatingOfferId] = useState(null);
+  const [manualForceOrderId, setManualForceOrderId] = useState("");
   
   // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -544,9 +545,30 @@ export default function AdminDashboard() {
         {/* Right Column: Order History */}
         <div className="card">
           <h2>📋 Riwayat Pesanan</h2>
-          <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem'}}>
+          <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem'}}>
             Log transaksi terbaru. Klik "Log API" untuk bukti detail.
           </p>
+          
+          <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'center'}}>
+             <input 
+               type="text" 
+               placeholder="Order ID Lama (Contoh: 1784...)" 
+               value={manualForceOrderId}
+               onChange={(e) => setManualForceOrderId(e.target.value)}
+               style={{flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', fontSize: '0.8rem'}}
+             />
+             <button 
+               onClick={() => {
+                 if (manualForceOrderId.trim()) {
+                    deliverManualG2G(manualForceOrderId.trim(), 1);
+                    setManualForceOrderId("");
+                 }
+               }}
+               style={{padding: '0.5rem 1rem', fontSize: '0.8rem', backgroundColor: 'var(--success)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap'}}
+             >
+               📦 Kirim Manual
+             </button>
+          </div>
           
           <div className="table-container" style={{maxHeight: '400px', overflowY: 'auto'}}>
             <table>
