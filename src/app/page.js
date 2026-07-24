@@ -26,6 +26,11 @@ export default function AdminDashboard() {
   const [inlineSmmId, setInlineSmmId] = useState("");
   const [inlineSmmQty, setInlineSmmQty] = useState("");
   
+  // Etalase Editing States
+  const [editingOffer, setEditingOffer] = useState(null);
+  const [editOfferPrice, setEditOfferPrice] = useState("");
+  const [editOfferStock, setEditOfferStock] = useState("");
+  
   // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [alertInfo, setAlertInfo] = useState(null); // { type: 'error' | 'success', title: '', message: '' }
@@ -153,6 +158,27 @@ export default function AdminDashboard() {
       setAlertInfo({ type: 'error', title: 'Kesalahan Sistem', message: 'Terjadi kesalahan saat proses validasi.' });
     }
     setIsAdding(false);
+  };
+
+  const updateOffer = async (offerId, updates) => {
+    setAlertInfo({ type: 'success', title: 'Updating...', message: 'Menghubungi G2G API...' });
+    try {
+      const res = await fetch('/api/g2g-offers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offerId, ...updates })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAlertInfo(null);
+        setEditingOffer(null);
+        fetchG2gOffers();
+      } else {
+        setAlertInfo({ type: 'error', title: 'Update Gagal', message: data.error });
+      }
+    } catch(e) {
+      setAlertInfo({ type: 'error', title: 'Error', message: e.message });
+    }
   };
 
   // Step 2: Execute after confirmation
@@ -339,40 +365,7 @@ export default function AdminDashboard() {
             </button>
           </div>
           
-          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--accent)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--accent)' }}>✏️ Form Tambah / Edit Pemetaan</h3>
-            <form onSubmit={initiateAddMapping} style={{display: 'flex', gap: '0.5rem'}}>
-              <input 
-                type="text" 
-                placeholder="ID Produk G2G" 
-                value={newG2gId}
-                onChange={(e) => setNewG2gId(e.target.value)}
-                style={{flex: 2}}
-                required
-              />
-              <input 
-                type="text" 
-                placeholder="ID SMM" 
-                value={newSmmId}
-                onChange={(e) => setNewSmmId(e.target.value)}
-                style={{flex: 1}}
-                required
-              />
-              <input 
-                type="number" 
-                placeholder="Jmlh (Cth: 1000)" 
-                value={newSmmQty}
-                onChange={(e) => setNewSmmQty(e.target.value)}
-                style={{flex: 1}}
-                required
-              />
-              <button type="submit" disabled={isAdding}>
-                {isAdding ? '⏳...' : 'Simpan'}
-              </button>
-            </form>
-          </div>
-
-          <div style={{ marginBottom: '2rem' }}>
+                    <div style={{ marginBottom: '2rem' }}>
             <h3 style={{ marginBottom: '1rem', color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#d97706' }}></span>
               Menunggu Pemetaan (Belum Siap)
@@ -393,7 +386,7 @@ export default function AdminDashboard() {
                     <tr><td colSpan="3" className="empty-state">Semua produk sudah dipetakan!</td></tr>
                   ) : (
                     Object.entries(mappings).filter(([g2g, smm]) => smm === 'BELUM_DIPETAKAN').map(([g2g, smm]) => (
-                      <tr key={g2g} style={{ backgroundColor: '#fffbeb' }}>
+                      <tr key={g2g}>
                         <td style={{fontFamily: 'monospace', color: 'var(--accent)', fontSize: '1.1rem'}}>{g2g}</td>
                         <td>
                           <span style={{ color: '#d97706', fontWeight: 'bold', fontSize: '0.9rem' }}>⚠️ {smm}</span>
@@ -730,6 +723,7 @@ export default function AdminDashboard() {
                     <th>Harga Jual</th>
                     <th>Stok</th>
                     <th>Status</th>
+                    <th style={{textAlign: 'right'}}>Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -738,19 +732,46 @@ export default function AdminDashboard() {
                   ) : g2gOffers.map(o => (
                     <tr key={o.offer_id || o.id}>
                       <td style={{fontFamily: 'monospace', color: 'var(--accent)'}}>{o.offer_id || o.id}</td>
-                      <td>{o.title || o.offer_title || 'Penawaran G2G'}</td>
-                      <td>{o.currency} {o.price}</td>
-                      <td>{o.stock}</td>
+                      <td>{o.offer_title || o.title || 'Penawaran G2G'}</td>
+                      <td>
+                        {editingOffer === (o.offer_id || o.id) ? (
+                          <input type="number" step="0.01" value={editOfferPrice} onChange={(e) => setEditOfferPrice(e.target.value)} style={{ width: '80px', padding: '0.2rem' }} />
+                        ) : (
+                          `${o.offer_currency || o.currency} ${o.unit_price || o.price}`
+                        )}
+                      </td>
+                      <td>
+                        {editingOffer === (o.offer_id || o.id) ? (
+                          <input type="number" value={editOfferStock} onChange={(e) => setEditOfferStock(e.target.value)} style={{ width: '60px', padding: '0.2rem' }} />
+                        ) : (
+                          o.available_qty || o.api_qty || o.stock || 0
+                        )}
+                      </td>
                       <td>
                         <span style={{
                           padding: '0.2rem 0.5rem', 
                           borderRadius: '4px', 
                           fontSize: '0.8rem',
-                          backgroundColor: (o.active || o.status === 'active') ? '#d1fae5' : '#fee2e2',
-                          color: (o.active || o.status === 'active') ? '#047857' : '#b91c1c'
+                          backgroundColor: (o.offer_status === 'active' || o.active || o.status === 'active') ? '#d1fae5' : '#fee2e2',
+                          color: (o.offer_status === 'active' || o.active || o.status === 'active') ? '#047857' : '#b91c1c'
                         }}>
-                          {(o.active || o.status === 'active') ? 'Aktif' : 'Nonaktif'}
+                          {(o.offer_status === 'active' || o.active || o.status === 'active') ? 'Aktif' : 'Nonaktif'}
                         </span>
+                      </td>
+                      <td style={{textAlign: 'right'}}>
+                        {editingOffer === (o.offer_id || o.id) ? (
+                          <div style={{display: 'flex', gap: '4px', justifyContent: 'flex-end'}}>
+                            <button onClick={() => updateOffer(o.offer_id || o.id, { price: editOfferPrice, stock: editOfferStock })} style={{padding: '0.3rem', fontSize: '0.8rem'}}>Simpan</button>
+                            <button onClick={() => setEditingOffer(null)} className="danger" style={{padding: '0.3rem', fontSize: '0.8rem'}}>Batal</button>
+                          </div>
+                        ) : (
+                          <div style={{display: 'flex', gap: '4px', justifyContent: 'flex-end'}}>
+                            <button onClick={() => { setEditingOffer(o.offer_id || o.id); setEditOfferPrice(o.unit_price || o.price); setEditOfferStock(o.available_qty || o.api_qty || o.stock || 0); }} style={{padding: '0.3rem', fontSize: '0.8rem'}}>Ubah</button>
+                            <button onClick={() => updateOffer(o.offer_id || o.id, { active: !(o.offer_status === 'active' || o.active || o.status === 'active') })} style={{padding: '0.3rem', fontSize: '0.8rem', backgroundColor: (o.offer_status === 'active' || o.active || o.status === 'active') ? '#f59e0b' : '#10b981', color: 'white', border: 'none'}}>
+                              {(o.offer_status === 'active' || o.active || o.status === 'active') ? 'Jeda' : 'Aktifkan'}
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

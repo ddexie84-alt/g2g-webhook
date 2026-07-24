@@ -26,7 +26,7 @@ async function saveOrderLog(orderData) {
     const rawLogs = await redis.lrange("recent_orders", 0, 99);
     let logs = rawLogs.map(l => typeof l === 'string' ? JSON.parse(l) : l);
     
-    const existingIndex = logs.findIndex(l => l.orderId === orderData.orderId && l.orderId !== 'UNKNOWN_ORDER');
+    const existingIndex = logs.findIndex(l => l.g2gOrderId === orderData.g2gOrderId && l.g2gOrderId !== 'UNKNOWN_ORDER' && !String(l.g2gOrderId).startsWith('TEST'));
     
     if (existingIndex >= 0) {
       // Perbarui log yang sudah ada
