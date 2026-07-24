@@ -414,7 +414,9 @@ export default function AdminDashboard() {
         </div>
       </div>
     );
-    return (
+  }
+
+  return (
     <div className="dashboard-layout">
       {/* Sidebar Navigation */}
       <aside className="sidebar">
@@ -471,79 +473,97 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-      {activeTab === 'pemetaan' && (
-      <>
-      <div className="grid">
-        {/* Left Column: Product Mapping */}
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ flex: 1, minWidth: '200px' }}>
-              <h2 style={{ marginBottom: '0.25rem' }}>📦 Pengelola Produk</h2>
-              <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0}}>
-                Pasangkan ID Produk G2G dengan ID Layanan SMM.
-              </p>
+        {activeTab === 'pemetaan' && (
+        <div className="grid">
+          {/* Left Column: Product Mapping */}
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <h2 style={{ marginBottom: '0.25rem' }}>📦 Pengelola Produk</h2>
+                <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0}}>
+                  Pasangkan ID Produk G2G dengan ID Layanan SMM.
+                </p>
+              </div>
+              <button 
+                onClick={syncG2G} 
+                disabled={isSyncing}
+                style={{ backgroundColor: 'var(--success)', border: 'none', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+              >
+                {isSyncing ? '⏳ Menyinkronkan...' : '🔄 Tarik Data dari G2G'}
+              </button>
             </div>
-            <button 
-              onClick={syncG2G} 
-              disabled={isSyncing}
-              style={{ backgroundColor: 'var(--success)', border: 'none', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-            >
-              {isSyncing ? '⏳ Menyinkronkan...' : '🔄 Tarik Data dari G2G'}
-            </button>
-          </div>
-          
-                    <div style={{ marginBottom: '2rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-              <h3 style={{ margin: 0, color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#d97706' }}></span>
-                Menunggu Pemetaan (Belum Siap)
-              </h3>
-              <input 
-                type="text" 
-                placeholder="🔍 Cari ID G2G..." 
-                value={searchPemetaan} 
-                onChange={(e) => setSearchPemetaan(e.target.value)} 
-                style={{ flex: 1, minWidth: '200px', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
-              />
-            </div>
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID G2G</th>
-                    <th>Detail SMM</th>
-                    <th style={{textAlign: 'right'}}>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan="3" className="empty-state">Memuat data...</td></tr>
-                  ) : Object.keys(mappings).filter(k => mappings[k] === 'BELUM_DIPETAKAN').length === 0 ? (
-                    <tr><td colSpan="3" className="empty-state">Semua produk sudah dipetakan!</td></tr>
-                  ) : (
-                    Object.entries(mappings).filter(([g2g, smm]) => smm === 'BELUM_DIPETAKAN' && (!searchPemetaan || g2g.toLowerCase().includes(searchPemetaan.toLowerCase()) || (names[g2g] && names[g2g].toLowerCase().includes(searchPemetaan.toLowerCase())))).map(([g2g, smm]) => (
-                      <tr key={g2g}>
-                        <td style={{fontFamily: 'monospace', color: 'var(--accent)', fontSize: '1.1rem'}}>{g2g}</td>
-                        <td>
-                          <span style={{ color: '#d97706', fontWeight: 'bold', fontSize: '0.9rem' }}>⚠️ {smm}</span>
-                          {names[g2g] && (
-                            <div style={{fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem', lineHeight: '1.4'}}>
+            
+            <div style={{ marginBottom: '2rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <h3 style={{ margin: 0, color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#d97706' }}></span>
+                  Menunggu Pemetaan (Belum Siap)
+                </h3>
+                <div style={{display: 'flex', gap: '0.5rem'}}>
+                  <button onClick={() => setCategoryFilter('Semua')} className={`badge ${categoryFilter === 'Semua' ? 'warning' : ''}`} style={{border: 'none', cursor: 'pointer', background: categoryFilter === 'Semua' ? 'rgba(245, 158, 11, 0.2)' : 'transparent', color: categoryFilter === 'Semua' ? '#fbbf24' : 'var(--text-muted)'}}>Semua</button>
+                  <button onClick={() => setCategoryFilter('Akun')} className={`badge ${categoryFilter === 'Akun' ? 'warning' : ''}`} style={{border: 'none', cursor: 'pointer', background: categoryFilter === 'Akun' ? 'rgba(245, 158, 11, 0.2)' : 'transparent', color: categoryFilter === 'Akun' ? '#fbbf24' : 'var(--text-muted)'}}>Akun</button>
+                  <button onClick={() => setCategoryFilter('Top Up')} className={`badge ${categoryFilter === 'Top Up' ? 'warning' : ''}`} style={{border: 'none', cursor: 'pointer', background: categoryFilter === 'Top Up' ? 'rgba(245, 158, 11, 0.2)' : 'transparent', color: categoryFilter === 'Top Up' ? '#fbbf24' : 'var(--text-muted)'}}>Top Up</button>
+                </div>
+              </div>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID G2G</th>
+                      <th>Nama / Judul</th>
+                      <th style={{textAlign: 'right'}}>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr><td colSpan="3" className="empty-state">Memuat data...</td></tr>
+                    ) : Object.keys(mappings).filter(k => mappings[k] === 'BELUM_DIPETAKAN').length === 0 ? (
+                      <tr><td colSpan="3" className="empty-state">Semua produk sudah dipetakan! 🎉</td></tr>
+                    ) : (
+                      Object.entries(mappings).filter(([g2g, smm]) => smm === 'BELUM_DIPETAKAN').filter(([g2g]) => {
+                        const title = (names[g2g] || "").toLowerCase();
+                        if (categoryFilter === 'Akun') {
+                          return title.includes('account') || title.includes('akun') || title.includes('premium') || title.includes('netflix') || title.includes('spotify');
+                        } else if (categoryFilter === 'Top Up') {
+                          return title.includes('top up') || title.includes('subscription') || title.includes('vip') || title.includes('uc') || title.includes('diamond');
+                        }
+                        return true;
+                      }).map(([g2g, smm]) => (
+                      <tr key={g2g} style={{ backgroundColor: 'rgba(245, 158, 11, 0.05)' }}>
+                        <td style={{fontFamily: 'monospace', color: '#fbbf24', fontSize: '1.1rem'}}>{g2g}</td>
+                        <td style={{fontSize: '0.85rem', lineHeight: '1.4'}}>
+                          {names[g2g] ? (
+                            <div style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}} title={names[g2g]}>
                               {names[g2g]}
                             </div>
-                          )}
+                          ) : 'Tidak Diketahui'}
                         </td>
                         <td style={{textAlign: 'right'}}>
                           {editingRow === g2g ? (
                             <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
-                              <input type="text" placeholder="ID SMM" value={inlineSmmId} onChange={e => setInlineSmmId(e.target.value)} style={{padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.8rem'}} />
-                              <input type="number" placeholder="Qty (SMM)" value={inlineSmmQty} onChange={e => setInlineSmmQty(e.target.value)} style={{padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.8rem'}} />
-                              <button style={{padding: '0.4rem', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => initiateAddMapping(null, g2g, inlineSmmId, inlineSmmQty)}>Simpan</button>
-                              <button style={{padding: '0.4rem', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => setEditingRow(null)}>Batal</button>
+                              <input 
+                                type="text" 
+                                placeholder="ID SMM" 
+                                value={inlineSmmId} 
+                                onChange={(e) => setInlineSmmId(e.target.value)}
+                                style={{padding: '0.3rem', width: '80px', fontSize: '0.8rem'}}
+                              />
+                              <input 
+                                type="number" 
+                                placeholder="Qty" 
+                                value={inlineSmmQty} 
+                                onChange={(e) => setInlineSmmQty(e.target.value)}
+                                style={{padding: '0.3rem', width: '80px', fontSize: '0.8rem'}}
+                              />
+                              <div style={{display: 'flex', gap: '4px'}}>
+                                <button style={{padding: '0.3rem', backgroundColor: 'var(--success)', border: 'none', color: 'white', flex: 1, borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => initiateAddMapping(null, g2g, inlineSmmId, inlineSmmQty)}>✔</button>
+                                <button style={{padding: '0.3rem', backgroundColor: '#e2e8f0', border: 'none', flex: 1, borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => setEditingRow(null)}>✖</button>
+                              </div>
                             </div>
                           ) : (
                             <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
                               <button 
-                                style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--primary)', border: 'none', color: 'white', cursor: 'pointer'}} 
+                                style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--accent)', border: 'none', color: 'white', cursor: 'pointer'}} 
                                 onClick={() => {
                                   setEditingRow(g2g);
                                   setInlineSmmId('');
@@ -605,8 +625,18 @@ export default function AdminDashboard() {
                       <td style={{textAlign: 'right'}}>
                         {editingRow === g2g ? (
                           <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
-                            <input type="text" placeholder="ID SMM" value={inlineSmmId} onChange={e => setInlineSmmId(e.target.value)} style={{padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.8rem'}} />
-                            <input type="number" placeholder="Qty (SMM)" value={inlineSmmQty} onChange={e => setInlineSmmQty(e.target.value)} style={{padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.8rem'}} />
+                            <input 
+                              type="text" 
+                              value={inlineSmmId} 
+                              onChange={(e) => setInlineSmmId(e.target.value)}
+                              style={{padding: '0.3rem', width: '80px', fontSize: '0.8rem'}}
+                            />
+                            <input 
+                              type="number" 
+                              value={inlineSmmQty} 
+                              onChange={(e) => setInlineSmmQty(e.target.value)}
+                              style={{padding: '0.3rem', width: '80px', fontSize: '0.8rem'}}
+                            />
                             <button style={{padding: '0.4rem', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => initiateAddMapping(null, g2g, inlineSmmId, inlineSmmQty)}>Simpan</button>
                             <button style={{padding: '0.4rem', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => setEditingRow(null)}>Batal</button>
                           </div>
@@ -633,7 +663,7 @@ export default function AdminDashboard() {
           </div>
         </div>
         </div>
-      </>
+        </div>
       )}
 
       {activeTab === 'pesanan' && (
@@ -895,6 +925,9 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
             <div style={{marginTop: '1.5rem', textAlign: 'right'}}>
               <button className="danger" onClick={() => setDiagnosticsModalOpen(false)}>Tutup</button>
             </div>
@@ -1111,7 +1144,8 @@ export default function AdminDashboard() {
                         )}
                       </td>
                     </tr>
-                  )})
+                  )
+                  })}
                 </tbody>
               </table>
             </div>
