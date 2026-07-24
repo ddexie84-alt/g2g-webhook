@@ -72,10 +72,10 @@ export async function PATCH(req) {
       return NextResponse.json({ error: "Offer ID is required" }, { status: 400 });
     }
 
-    const updatePayload = {};
-    if (price !== undefined) updatePayload.price = parseFloat(price);
-    if (stock !== undefined) updatePayload.stock = parseInt(stock, 10);
-    if (active !== undefined) updatePayload.active = Boolean(active);
+    const payload = {};
+    if (price !== undefined) payload.unit_price = Number(price);
+    if (stock !== undefined) payload.api_qty = Number(stock);
+    if (active !== undefined) payload.offer_status = active ? 'live' : 'inactive';
 
     const path = `/v2/offers/${offerId}`;
     const patchHeaders = generateG2GHeaders(path, g2gApiKey, g2gUserId, g2gSecretKey);
@@ -83,7 +83,7 @@ export async function PATCH(req) {
     const response = await fetch(`https://open-api.g2g.com${path}`, {
       method: 'PATCH',
       headers: patchHeaders,
-      body: JSON.stringify(updatePayload)
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();

@@ -30,6 +30,7 @@ export default function AdminDashboard() {
   const [editingOffer, setEditingOffer] = useState(null);
   const [editOfferPrice, setEditOfferPrice] = useState("");
   const [editOfferStock, setEditOfferStock] = useState("");
+  const [searchEtalase, setSearchEtalase] = useState("");
   
   // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -707,11 +708,20 @@ export default function AdminDashboard() {
 
       {activeTab === 'etalase' && (
         <div className="card">
-          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem'}}>
             <h2 style={{margin: 0}}>Etalase G2G Aktif</h2>
-            <button onClick={fetchG2gOffers} disabled={isFetchingOffers} style={{padding: '0.5rem 1rem', borderRadius: '4px'}}>
-              {isFetchingOffers ? 'Memuat...' : '🔄 Refresh Data'}
-            </button>
+            <div style={{display: 'flex', gap: '1rem', flex: 1, minWidth: '200px'}}>
+              <input 
+                type="text" 
+                placeholder="🔍 Cari ID atau Nama Penawaran..." 
+                value={searchEtalase} 
+                onChange={(e) => setSearchEtalase(e.target.value)} 
+                style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+              />
+              <button onClick={fetchG2gOffers} disabled={isFetchingOffers} style={{padding: '0.5rem 1rem', borderRadius: '4px'}}>
+                {isFetchingOffers ? 'Memuat...' : '🔄 Refresh'}
+              </button>
+            </div>
           </div>
           {isFetchingOffers && g2gOffers.length === 0 ? <p>Membaca data etalase langsung dari G2G API...</p> : (
             <div className="table-container">
@@ -728,8 +738,12 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {g2gOffers.length === 0 ? (
-                    <tr><td colSpan="5" className="empty-state">Tidak ada penawaran ditemukan</td></tr>
-                  ) : g2gOffers.map(o => (
+                    <tr><td colSpan="6" className="empty-state">Tidak ada penawaran ditemukan</td></tr>
+                  ) : g2gOffers.filter(o => {
+                    if (!searchEtalase) return true;
+                    const q = searchEtalase.toLowerCase();
+                    return String(o.offer_id || o.id || '').toLowerCase().includes(q) || String(o.offer_title || o.title || '').toLowerCase().includes(q);
+                  }).map(o => (
                     <tr key={o.offer_id || o.id}>
                       <td style={{fontFamily: 'monospace', color: 'var(--accent)'}}>{o.offer_id || o.id}</td>
                       <td>{o.offer_title || o.title || 'Penawaran G2G'}</td>
@@ -750,7 +764,7 @@ export default function AdminDashboard() {
                       <td>
                         {(() => {
                           const rawStatus = o.offer_status ?? o.status ?? o.active ?? o.display ?? 'unknown';
-                          const isActive = String(rawStatus).toLowerCase() === 'active' || String(rawStatus).toLowerCase() === 'online' || rawStatus === 1 || rawStatus === true;
+                          const isActive = String(rawStatus).toLowerCase() === 'active' || String(rawStatus).toLowerCase() === 'live' || String(rawStatus).toLowerCase() === 'online' || rawStatus === 1 || rawStatus === true;
                           return (
                             <span style={{
                               padding: '0.2rem 0.5rem', 
@@ -759,7 +773,7 @@ export default function AdminDashboard() {
                               backgroundColor: isActive ? '#d1fae5' : '#fee2e2',
                               color: isActive ? '#047857' : '#b91c1c'
                             }}>
-                              {isActive ? 'Aktif' : `Nonaktif (${rawStatus})`}
+                              {isActive ? 'Aktif' : 'Nonaktif'}
                             </span>
                           );
                         })()}
@@ -773,15 +787,6 @@ export default function AdminDashboard() {
                         ) : (
                           <div style={{display: 'flex', gap: '4px', justifyContent: 'flex-end'}}>
                             <button onClick={() => { setEditingOffer(o.offer_id || o.id); setEditOfferPrice(o.unit_price || o.price); setEditOfferStock(o.available_qty || o.api_qty || o.stock || 0); }} style={{padding: '0.3rem', fontSize: '0.8rem'}}>Ubah</button>
-                            {(() => {
-                              const rawStatus = o.offer_status ?? o.status ?? o.active ?? o.display ?? 'unknown';
-                              const isActive = String(rawStatus).toLowerCase() === 'active' || String(rawStatus).toLowerCase() === 'online' || rawStatus === 1 || rawStatus === true;
-                              return (
-                                <button onClick={() => updateOffer(o.offer_id || o.id, { active: !isActive })} style={{padding: '0.3rem', fontSize: '0.8rem', backgroundColor: isActive ? '#f59e0b' : '#10b981', color: 'white', border: 'none'}}>
-                                  {isActive ? 'Jeda' : 'Aktifkan'}
-                                </button>
-                              );
-                            })()}
                           </div>
                         )}
                       </td>
