@@ -18,8 +18,57 @@ export default function AdminDashboard() {
   const [isAdding, setIsAdding] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('pemetaan');
+  const [g2gStore, setG2gStore] = useState(null);
   const [g2gOffers, setG2gOffers] = useState([]);
   const [isFetchingOffers, setIsFetchingOffers] = useState(false);
+  const [marginPercentage, setMarginPercentage] = useState("");
+  const [isBulkSyncing, setIsBulkSyncing] = useState(false);
+  const [g2gProducts, setG2gProducts] = useState([]);
+  const [isFetchingProducts, setIsFetchingProducts] = useState(false);
+  
+  const handleBulkSync = async () => {
+    if (!marginPercentage || isNaN(marginPercentage)) return;
+    if (!confirm(`Apakah Anda yakin ingin melakukan sync massal untuk seluruh etalase dengan margin ${marginPercentage}% dari harga SMM?`)) return;
+    
+    setIsBulkSyncing(true);
+    try {
+       const res = await fetch('/api/g2g-bulk-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ marginPercentage: Number(marginPercentage) })
+       });
+       const data = await res.json();
+       if (data.success) {
+          alert(`Berhasil sinkronisasi ${data.updatedCount} penawaran.`);
+          fetchG2gOffers();
+       } else {
+          alert(data.error || 'Gagal sinkronisasi massal.');
+       }
+    } catch(e) {
+       alert('Terjadi kesalahan sinkronisasi.');
+    }
+    setIsBulkSyncing(false);
+  };
+
+  const fetchG2gProducts = async () => {
+    setIsFetchingProducts(true);
+    try {
+      const res = await fetch('/api/g2g-products');
+      const data = await res.json();
+      if (data.success) {
+        setG2gProducts(data.products || []);
+      }
+    } catch(e) {
+      console.error(e);
+    }
+    setIsFetchingProducts(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'katalog' && g2gProducts.length === 0) {
+      fetchG2gProducts();
+    }
+  }, [activeTab]);
   
   // Inline Editing States
   const [editingRow, setEditingRow] = useState(null);
@@ -35,6 +84,8 @@ export default function AdminDashboard() {
   const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [updatingOfferId, setUpdatingOfferId] = useState(null);
   const [manualForceOrderId, setManualForceOrderId] = useState("");
+  const [diagnosticsModalOpen, setDiagnosticsModalOpen] = useState(false);
+  const [webhookLogs, setWebhookLogs] = useState([]);
   
   // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -42,7 +93,14 @@ export default function AdminDashboard() {
   const [confirmInfo, setConfirmInfo] = useState(null); // { g2gId, smmId, smmName, smmPrice, smmQty }
 
   const fetchG2gOffers = async () => { setIsFetchingOffers(true); try { const res = await fetch('/api/g2g-offers'); const data = await res.json(); if(data.success) setG2gOffers(data.offers); } catch(e){} setIsFetchingOffers(false); };
-  useEffect(() => { if(activeTab === 'etalase') fetchG2gOffers(); }, [activeTab]);
+  const fetchSmmServices = async () => { try { const res = await fetch('/api/smm-services'); const data = await res.json(); if(data.success) setSmmServices(data.services); } catch(e){} };
+  
+  useEffect(() => { 
+    if(activeTab === 'etalase' || activeTab === 'pesanan') {
+       if (g2gOffers.length === 0) fetchG2gOffers();
+       if (smmServices.length === 0) fetchSmmServices();
+    }
+  }, [activeTab]);
   const handleLogin = (e) => {
     e.preventDefault();
     if (password === "admin123") {
@@ -56,26 +114,40 @@ export default function AdminDashboard() {
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [mapsRes, ordersRes, profileRes, providersRes] = await Promise.all([
+      const [productsRes, ordersRes, profileRes, providersRes, storeRes] = await Promise.all([
         fetch("/api/products"),
         fetch("/api/orders"),
         fetch("/api/profile"),
-        fetch("/api/providers")
+        fetch("/api/providers"),
+        fetch("/api/g2g-store")
       ]);
-      const mapsData = await mapsRes.json();
-      const ordersData = await ordersRes.json();
-      const profileData = await profileRes.json();
-      const providersData = await providersRes.json();
       
-      setMappings(mapsData.mappings || {});
-      setNames(mapsData.names || {});
-      setQuantities(mapsData.quantities || {});
-      setProductProviders(mapsData.providers || {});
-      setApiProviders(providersData.providers || {});
-      setOrders(ordersData.orders || []);
+      if (productsRes.ok) {
+        const productsData = await productsRes.json();
+        setMappings(productsData.mappings || {});
+        setNames(productsData.names || {});
+        setQuantities(productsData.quantities || {});
+        setProductProviders(productsData.providers || {});
+      }
       
-      if (profileData.data) {
-        setProfile(profileData.data);
+      if (ordersRes.ok) {
+        const ordersData = await ordersRes.json();
+        setOrders(ordersData.orders || []);
+      }
+
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        setProfile(profileData.data || null);
+      }
+
+      if (providersRes.ok) {
+        const providersData = await providersRes.json();
+        setApiProviders(providersData.providers || {});
+      }
+
+      if (storeRes.ok) {
+        const storeData = await storeRes.json();
+        setG2gStore(storeData.store || null);
       }
     } catch (error) {
       console.error("Failed to fetch data", error);
@@ -342,42 +414,62 @@ export default function AdminDashboard() {
         </div>
       </div>
     );
-  }
-
-  return (
-    <div className="container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem', textAlign: 'left' }}>
-        <div>
-          <h1 style={{ marginBottom: '0' }}>G2G Auto-Delivery</h1>
-          <p style={{color: 'var(--text-muted)'}}>Sistem Manajemen Toko Otomatis</p>
+    return (
+    <div className="dashboard-layout">
+      {/* Sidebar Navigation */}
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <h1>G2G Auto-Delivery</h1>
+          <p style={{color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem'}}>Sistem Manajemen Toko Otomatis</p>
         </div>
-        
-        {/* Profile Widget */}
-        <div className="card" style={{ padding: '1rem 1.5rem', minWidth: '250px' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Status SMM Panel
+        <nav className="nav-menu">
+          <button className={`nav-item ${activeTab === 'pemetaan' ? 'active' : ''}`} onClick={() => setActiveTab('pemetaan')}>
+            🔗 Pemetaan Produk
+          </button>
+          <button className={`nav-item ${activeTab === 'etalase' ? 'active' : ''}`} onClick={() => { setActiveTab('etalase'); fetchG2gOffers(); }}>
+            🛒 Etalase G2G
+          </button>
+          <button className={`nav-item ${activeTab === 'pesanan' ? 'active' : ''}`} onClick={() => setActiveTab('pesanan')}>
+            📈 Pesanan & Analitik
+          </button>
+          <button className={`nav-item ${activeTab === 'katalog' ? 'active' : ''}`} onClick={() => setActiveTab('katalog')}>
+            📚 Katalog G2G (Beta)
+          </button>
+        </nav>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="main-content">
+        <header className="top-header">
+          {/* Store Widget */}
+          <div className="widget">
+            <div className="widget-label">Status Toko G2G</div>
+            {g2gStore ? (
+              <>
+                <div className="widget-value" style={{color: 'var(--accent)'}}>⭐ {g2gStore.rating || 'N/A'}</div>
+                <div className="widget-sub">
+                  🏪 {g2gStore.store_name || g2gStore.name || 'G2G Store'}
+                  {g2gStore.status === 'online' && <span style={{color: 'var(--success)', fontSize: '0.6rem'}}>●</span>}
+                </div>
+              </>
+            ) : (
+              <div className="widget-sub" style={{color: 'var(--error)'}}>⏳ Memuat data toko...</div>
+            )}
           </div>
-          {profile ? (
-            <div style={{ marginTop: '0.5rem' }}>
-              <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--success)' }}>
-                Rp {Number(profile.balance || 0).toLocaleString('id-ID')}
-              </div>
-              <div style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>
-                👤 {profile.username || 'User'}
-              </div>
-            </div>
-          ) : (
-            <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--error)' }}>
-              ⚠️ Gagal mengambil saldo
-            </div>
-          )}
-        </div>
-      </header>
 
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid #e5e7eb' }}>
-        <button onClick={() => setActiveTab('pemetaan')} style={{ backgroundColor: 'transparent', color: activeTab === 'pemetaan' ? 'var(--primary)' : 'var(--text-muted)', border: 'none', borderBottom: activeTab === 'pemetaan' ? '2px solid var(--primary)' : '2px solid transparent', padding: '0.5rem 1rem', fontSize: '1rem', cursor: 'pointer' }}>📦 Pemetaan Produk</button>
-        <button onClick={() => setActiveTab('etalase')} style={{ backgroundColor: 'transparent', color: activeTab === 'etalase' ? 'var(--primary)' : 'var(--text-muted)', border: 'none', borderBottom: activeTab === 'etalase' ? '2px solid var(--primary)' : '2px solid transparent', padding: '0.5rem 1rem', fontSize: '1rem', cursor: 'pointer' }}>🏪 Etalase G2G</button>
-      </div>
+          {/* Profile Widget */}
+          <div className="widget">
+            <div className="widget-label">Status SMM Panel</div>
+            {profile ? (
+              <>
+                <div className="widget-value" style={{color: 'var(--success)'}}>Rp {Number(profile.balance || 0).toLocaleString('id-ID')}</div>
+                <div className="widget-sub">👤 {profile.username || 'User'}</div>
+              </>
+            ) : (
+              <div className="widget-sub" style={{color: 'var(--error)'}}>⚠️ Gagal mengambil saldo</div>
+            )}
+          </div>
+        </header>
 
       {activeTab === 'pemetaan' && (
       <>
@@ -541,50 +633,127 @@ export default function AdminDashboard() {
           </div>
         </div>
         </div>
+      </>
+      )}
 
-        {/* Right Column: Order History */}
+      {activeTab === 'pesanan' && (
+      <>
+        {/* Analytics Section */}
+        {(() => {
+           let totalRevenue = 0;
+           let totalCost = 0;
+           
+           orders.forEach(orderStr => {
+             const order = typeof orderStr === 'string' ? JSON.parse(orderStr) : orderStr;
+             const status = order.rawG2G?.payload?.order_status || order.rawG2G?.event || order.rawG2G?.event_type || order.rawG2G?.type;
+             const isPaid = status === 'order.api_delivery' || status === 'order.confirmed' || status === 'paid' || status === 'delivering' || status === 'delivered';
+             
+             if (isPaid) {
+                // Find G2G Price
+                let g2gPrice = order.rawG2G?.payload?.unit_price || 0;
+                if (!g2gPrice) {
+                   const cleanOffer = (order.offerId || "").replace(/^#/, '');
+                   const offer = g2gOffers.find(o => (o.offer_id || o.id) === cleanOffer);
+                   if (offer) g2gPrice = offer.unit_price || offer.price || 0;
+                }
+                
+                // Find SMM Price (per 1000 usually)
+                let smmPrice = 0;
+                const service = smmServices.find(s => String(s.service) === String(order.smmServiceId));
+                if (service) {
+                   smmPrice = (Number(service.rate || service.price || 0) / 1000); 
+                }
+                
+                const revenue = Number(g2gPrice) * Number(order.purchasedQty || 0);
+                const cost = smmPrice * Number(order.quantity || 0); // order.quantity is totalSmmQuantity
+                
+                totalRevenue += revenue;
+                totalCost += cost;
+             }
+           });
+           
+           const totalProfit = totalRevenue - totalCost;
+
+           return (
+             <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', marginBottom: '2rem' }}>
+               <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent)' }}>
+                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Total Pendapatan (G2G)</div>
+                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Rp {totalRevenue.toLocaleString('id-ID')}</div>
+               </div>
+               <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--error)' }}>
+                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Total Pengeluaran (SMM)</div>
+                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Rp {totalCost.toLocaleString('id-ID')}</div>
+               </div>
+               <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--success)' }}>
+                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Keuntungan Bersih (Profit)</div>
+                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success)' }}>Rp {totalProfit.toLocaleString('id-ID')}</div>
+               </div>
+             </div>
+           );
+        })()}
+
         <div className="card">
-          <h2>📋 Riwayat Pesanan</h2>
+          <h2>📋 Riwayat Pesanan & Log Keamanan</h2>
           <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem'}}>
-            Log transaksi terbaru. Klik "Log API" untuk bukti detail.
+            Semua transaksi masuk dicatat di sini. Gunakan tombol "Kirim Manual" jika SMM gagal/tertunda.
           </p>
           
-          <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'center'}}>
-             <input 
-               type="text" 
-               placeholder="Order ID Lama (Contoh: 1784...)" 
-               value={manualForceOrderId}
-               onChange={(e) => setManualForceOrderId(e.target.value)}
-               style={{flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', fontSize: '0.8rem'}}
-             />
+          <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap'}}>
+             <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center', borderRight: '1px solid var(--border)', paddingRight: '1rem', flex: 1}}>
+                 <input 
+                   type="text" 
+                   placeholder="Order ID Lama (Contoh: 1784...)" 
+                   value={manualForceOrderId}
+                   onChange={(e) => setManualForceOrderId(e.target.value)}
+                   style={{flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'white', fontSize: '0.8rem'}}
+                 />
+                 <button 
+                   onClick={() => {
+                     if (manualForceOrderId.trim()) {
+                        deliverManualG2G(manualForceOrderId.trim(), 1);
+                        setManualForceOrderId("");
+                     }
+                   }}
+                   style={{padding: '0.5rem 1rem', fontSize: '0.8rem', backgroundColor: 'var(--success)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap'}}
+                 >
+                   📦 Kirim Manual
+                 </button>
+             </div>
+             
              <button 
-               onClick={() => {
-                 if (manualForceOrderId.trim()) {
-                    deliverManualG2G(manualForceOrderId.trim(), 1);
-                    setManualForceOrderId("");
+               onClick={async () => {
+                 setWebhookLogs(null);
+                 setDiagnosticsModalOpen(true);
+                 try {
+                    const res = await fetch('/api/g2g-webhook-logs');
+                    const data = await res.json();
+                    setWebhookLogs(data.logs || []);
+                 } catch(e) {
+                    setWebhookLogs([]);
                  }
                }}
-               style={{padding: '0.5rem 1rem', fontSize: '0.8rem', backgroundColor: 'var(--success)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap'}}
+               style={{padding: '0.5rem 1rem', fontSize: '0.8rem', backgroundColor: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap'}}
              >
-               📦 Kirim Manual
+               📡 Cek Webhook G2G Gagal
              </button>
           </div>
           
-          <div className="table-container" style={{maxHeight: '400px', overflowY: 'auto'}}>
+          <div className="table-container" style={{maxHeight: '600px', overflowY: 'auto'}}>
             <table>
               <thead>
                 <tr>
                   <th>Waktu</th>
                   <th>Order G2G</th>
+                  <th>Layanan SMM & Target</th>
                   <th>Status</th>
                   <th>Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="4" className="empty-state">Memuat data...</td></tr>
+                  <tr><td colSpan="5" className="empty-state">Memuat data...</td></tr>
                 ) : orders.length === 0 ? (
-                  <tr><td colSpan="4" className="empty-state">Belum ada pesanan masuk.</td></tr>
+                  <tr><td colSpan="5" className="empty-state">Belum ada pesanan masuk.</td></tr>
                 ) : (
                   orders.map((order, i) => {
                     const parsedOrder = typeof order === 'string' ? JSON.parse(order) : order;
@@ -592,29 +761,28 @@ export default function AdminDashboard() {
                       <tr key={i}>
                         <td style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>
                           {new Date(parsedOrder.timestamp).toLocaleTimeString('id-ID')}
+                          <div style={{fontSize: '0.65rem', marginTop: '4px'}}>{new Date(parsedOrder.timestamp).toLocaleDateString('id-ID')}</div>
                         </td>
-                        <td style={{fontFamily: 'monospace'}}>{parsedOrder.g2gOrderId}</td>
+                        <td style={{fontFamily: 'monospace'}}>
+                           {parsedOrder.g2gOrderId}
+                           <div style={{fontSize: '0.7rem', color: 'var(--accent)', marginTop: '4px'}}>{parsedOrder.offerId}</div>
+                        </td>
+                        <td>
+                           <div style={{fontSize: '0.8rem', fontWeight: 'bold'}}>{parsedOrder.smmServiceId === 'NON_SMM' ? 'NON-SMM (Digital)' : `ID SMM: ${parsedOrder.smmServiceId}`}</div>
+                           <div style={{fontSize: '0.75rem', color: 'var(--text-muted)', wordBreak: 'break-all', maxWidth: '200px'}}>{parsedOrder.targetLink}</div>
+                        </td>
                         <td>
                           {(() => {
                             const statusOrEvent = parsedOrder.rawG2G?.payload?.order_status || parsedOrder.rawG2G?.event || parsedOrder.rawG2G?.event_type || parsedOrder.rawG2G?.type;
                             const badge = getG2gStatusBadge(statusOrEvent);
                             return (
                               <div style={{display: 'flex', flexDirection: 'column', gap: '6px'}}>
-                                <span style={{
-                                  backgroundColor: badge.bg, 
-                                  color: badge.color, 
-                                  padding: '4px 8px', 
-                                  borderRadius: '12px', 
-                                  fontSize: '0.75rem', 
-                                  fontWeight: 'bold',
-                                  display: 'inline-block',
-                                  width: 'fit-content'
-                                }}>
+                                <span style={{ backgroundColor: badge.bg, color: badge.color, padding: '0.25rem 0.5rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block', whiteSpace: 'nowrap' }}>
                                   {badge.label}
                                 </span>
-                                <div style={{fontSize: '0.7rem', color: 'var(--text-muted)'}}>
-                                  {parsedOrder.success ? '✅ SMM Sukses' : '❌ SMM Dilewati/Gagal'}
-                                </div>
+                                {parsedOrder.success === false && parsedOrder.rawSMM?.error && (
+                                   <span style={{color: 'var(--error)', fontSize: '0.7rem', display: 'block', maxWidth: '150px'}} title={parsedOrder.rawSMM.error}>⚠️ SMM Error</span>
+                                )}
                               </div>
                             );
                           })()}
@@ -625,7 +793,7 @@ export default function AdminDashboard() {
                               style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: '4px', cursor: 'pointer'}} 
                               onClick={() => setSelectedOrder(parsedOrder)}
                             >
-                              Log API
+                              Log
                             </button>
                             {(() => {
                               const status = parsedOrder.rawG2G?.payload?.order_status || parsedOrder.rawG2G?.event || parsedOrder.rawG2G?.event_type || parsedOrder.rawG2G?.type;
@@ -637,7 +805,7 @@ export default function AdminDashboard() {
                                     style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'var(--success)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer'}} 
                                     onClick={() => deliverManualG2G(parsedOrder.g2gOrderId, parsedOrder.purchasedQty || 1)}
                                   >
-                                    📦 Force Deliver
+                                    Force
                                   </button>
                                 );
                               }
@@ -653,7 +821,8 @@ export default function AdminDashboard() {
             </table>
           </div>
         </div>
-      </div>
+      </>
+      )}
 
       {/* Confirmation Modal */}
       {confirmInfo && (
@@ -692,15 +861,56 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Alert Modal */}
+      {/* Diagnostics Modal */}
+      {diagnosticsModalOpen && (
+        <div className="modal-overlay" onClick={() => setDiagnosticsModalOpen(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth: '800px', width: '90%'}}>
+            <h2 style={{marginBottom: '1rem'}}>📡 Log Webhook G2G yang Gagal</h2>
+            <p style={{fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem'}}>
+              Menampilkan log dari server G2G untuk webhook yang gagal terkirim ke Vercel Anda dalam 7 hari terakhir. 
+              Gunakan ID Pesanan di bawah ini pada fitur "Kirim Manual" jika pesanan terlewat.
+            </p>
+
+            <div style={{maxHeight: '400px', overflowY: 'auto'}}>
+              {!webhookLogs ? (
+                 <p style={{textAlign: 'center', padding: '2rem'}}>⏳ Menarik log dari G2G Server...</p>
+              ) : webhookLogs.length === 0 ? (
+                 <p style={{textAlign: 'center', padding: '2rem', color: 'var(--success)'}}>✅ Semua sistem lancar! Tidak ada webhook gagal dari G2G.</p>
+              ) : (
+                <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
+                  {webhookLogs.map((log, i) => (
+                    <div key={i} style={{padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border)'}}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem'}}>
+                        <strong style={{color: 'var(--error)'}}>Status: {log.status}</strong>
+                        <span style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>{log.created_at || 'Waktu tidak diketahui'}</span>
+                      </div>
+                      <div style={{fontSize: '0.85rem', marginBottom: '0.5rem'}}>
+                        <strong>Event:</strong> <span style={{color: 'var(--accent)'}}>{log.event_type}</span>
+                      </div>
+                      <div style={{fontSize: '0.85rem', marginBottom: '0.5rem'}}>
+                        <strong>Target URL:</strong> <code style={{padding: '2px 4px', backgroundColor: 'rgba(255,255,255,0.1)'}}>{log.target_url}</code>
+                      </div>
+                      <div style={{fontSize: '0.85rem'}}>
+                        <strong>Pesan Error (G2G):</strong> <span style={{color: '#f87171'}}>{log.error_message || log.message || 'Tidak ada respons'}</span>
+                      </div>
+                    </div>
+                  ))}
+            <div style={{marginTop: '1.5rem', textAlign: 'right'}}>
+              <button className="danger" onClick={() => setDiagnosticsModalOpen(false)}>Tutup</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Login Style Overlay */}
       {alertInfo && !confirmInfo && (
-        <div className="auth-overlay" onClick={() => setAlertInfo(null)}>
-          <div className="auth-card" style={{ maxWidth: '400px', width: '90%', textAlign: 'center', cursor: 'default' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => setAlertInfo(null)}>
+          <div className="modal" style={{ maxWidth: '400px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>
               {alertInfo.type === 'error' ? '❌' : '✅'}
             </div>
-            <h2 style={{ color: alertInfo.type === 'error' ? 'var(--error)' : 'var(--success)', marginBottom: '1rem' }}>
-              {alertInfo.title}
+            <h2 style={{ justifyContent: 'center', color: alertInfo.type === 'error' ? 'var(--error)' : 'var(--success)', marginBottom: '1rem' }}>
+              {alertInfo.title || 'Pemberitahuan'}
             </h2>
             <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', lineHeight: '1.5' }}>
               {alertInfo.message}
@@ -708,8 +918,6 @@ export default function AdminDashboard() {
             <button style={{ width: '100%' }} onClick={() => setAlertInfo(null)}>Tutup</button>
           </div>
         </div>
-      )}
-      </>
       )}
 
       {/* Log Modal */}
@@ -792,13 +1000,26 @@ export default function AdminDashboard() {
         <div className="card">
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem'}}>
             <h2 style={{margin: 0}}>Etalase G2G Aktif</h2>
-            <div style={{display: 'flex', gap: '1rem', flex: 1, minWidth: '200px'}}>
+            <div style={{display: 'flex', gap: '1rem', flexWrap: 'wrap', minWidth: '200px'}}>
+              <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center', borderRight: '1px solid var(--border)', paddingRight: '1rem'}}>
+                 <span style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Auto-Margin:</span>
+                 <input 
+                    type="number" 
+                    placeholder="%" 
+                    value={marginPercentage}
+                    onChange={(e) => setMarginPercentage(e.target.value)}
+                    style={{width: '60px', padding: '0.4rem', borderRadius: '4px', border: '1px solid var(--border)'}}
+                 />
+                 <button onClick={handleBulkSync} disabled={isBulkSyncing || !marginPercentage} style={{padding: '0.4rem 0.8rem', backgroundColor: 'var(--accent)', border: 'none', color: 'white', borderRadius: '4px'}}>
+                    {isBulkSyncing ? '⏳ Sync...' : '⚡ Sync Massal'}
+                 </button>
+              </div>
               <input 
                 type="text" 
                 placeholder="🔍 Cari ID atau Nama Penawaran..." 
                 value={searchEtalase} 
                 onChange={(e) => setSearchEtalase(e.target.value)} 
-                style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                style={{ flex: 1, minWidth: '200px', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
               />
               <button onClick={fetchG2gOffers} disabled={isFetchingOffers} style={{padding: '0.5rem 1rem', borderRadius: '4px'}}>
                 {isFetchingOffers ? 'Memuat...' : '🔄 Refresh'}
@@ -840,7 +1061,10 @@ export default function AdminDashboard() {
                       return title.includes('followers') || title.includes('likes') || title.includes('views') || title.includes('comments') || title.includes('tiktok') || title.includes('youtube') || title.includes('instagram');
                     }
                     return true;
-                  }).map(o => (
+                  }).map(o => {
+                    const rawStatus = o.offer_status ?? o.status ?? o.active ?? o.display ?? 'unknown';
+                    const isActive = String(rawStatus).toLowerCase() === 'active' || String(rawStatus).toLowerCase() === 'live' || String(rawStatus).toLowerCase() === 'online' || rawStatus === 1 || rawStatus === true;
+                    return (
                     <tr key={o.offer_id || o.id}>
                       <td style={{fontFamily: 'monospace', color: 'var(--accent)'}}>{o.offer_id || o.id}</td>
                       <td>{o.offer_title || o.title || 'Penawaran G2G'}</td>
@@ -859,21 +1083,15 @@ export default function AdminDashboard() {
                         )}
                       </td>
                       <td>
-                        {(() => {
-                          const rawStatus = o.offer_status ?? o.status ?? o.active ?? o.display ?? 'unknown';
-                          const isActive = String(rawStatus).toLowerCase() === 'active' || String(rawStatus).toLowerCase() === 'live' || String(rawStatus).toLowerCase() === 'online' || rawStatus === 1 || rawStatus === true;
-                          return (
-                            <span style={{
-                              padding: '0.2rem 0.5rem', 
-                              borderRadius: '4px', 
-                              fontSize: '0.8rem',
-                              backgroundColor: isActive ? '#d1fae5' : '#fee2e2',
-                              color: isActive ? '#047857' : '#b91c1c'
-                            }}>
-                              {isActive ? 'Aktif' : 'Nonaktif'}
-                            </span>
-                          );
-                        })()}
+                        <span style={{
+                          padding: '0.2rem 0.5rem', 
+                          borderRadius: '4px', 
+                          fontSize: '0.8rem',
+                          backgroundColor: isActive ? '#d1fae5' : '#fee2e2',
+                          color: isActive ? '#047857' : '#b91c1c'
+                        }}>
+                          {isActive ? 'Aktif' : 'Nonaktif'}
+                        </span>
                       </td>
                       <td style={{textAlign: 'right'}}>
                         {editingOffer === (o.offer_id || o.id) ? (
@@ -885,18 +1103,62 @@ export default function AdminDashboard() {
                           </div>
                         ) : (
                           <div style={{display: 'flex', gap: '4px', justifyContent: 'flex-end'}}>
+                            <button onClick={() => updateOffer(o.offer_id || o.id, { status: isActive ? 'offline' : 'live' })} disabled={updatingOfferId === (o.offer_id || o.id)} style={{padding: '0.3rem', fontSize: '0.8rem', backgroundColor: isActive ? '#f59e0b' : '#10b981', color: 'white', border: 'none'}}>
+                              {updatingOfferId === (o.offer_id || o.id) ? '...' : (isActive ? 'Matikan' : 'Hidupkan')}
+                            </button>
                             <button onClick={() => { setEditingOffer(o.offer_id || o.id); setEditOfferPrice(o.unit_price || o.price); setEditOfferStock(o.available_qty || o.api_qty || o.stock || 0); }} style={{padding: '0.3rem', fontSize: '0.8rem'}}>Ubah</button>
                           </div>
                         )}
                       </td>
                     </tr>
-                  ))}
+                  )})
                 </tbody>
               </table>
             </div>
           )}
         </div>
       )}
+
+      {activeTab === 'katalog' && (
+        <div className="card">
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
+            <h2 style={{margin: 0}}>📚 Katalog Resmi G2G</h2>
+            <button onClick={fetchG2gProducts} disabled={isFetchingProducts} className="secondary">
+              {isFetchingProducts ? '⏳ Menarik Data...' : '🔄 Refresh Katalog'}
+            </button>
+          </div>
+          <p style={{color: 'var(--text-muted)', marginBottom: '1.5rem'}}>
+            Gunakan katalog ini untuk melakukan riset game atau layanan yang paling banyak tersedia di G2G sebelum Anda memutuskan untuk memetakannya ke SMM Panel.
+          </p>
+          
+          {isFetchingProducts ? (
+            <div className="empty-state">Menarik data dari API G2G...</div>
+          ) : g2gProducts.length === 0 ? (
+            <div className="empty-state">Katalog Kosong. Tekan Refresh.</div>
+          ) : (
+            <div className="metrics-grid">
+              {g2gProducts.map(p => (
+                <div key={p.id} className="metric-card" style={{borderLeft: '4px solid var(--accent)'}}>
+                  <div style={{fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                    {p.name}
+                    {p.status === 1 && <span className="badge success">Aktif</span>}
+                  </div>
+                  <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace'}}>
+                    ID: {p.id}
+                  </div>
+                  {p.description && (
+                     <div style={{fontSize: '0.85rem', marginTop: '0.5rem', color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>
+                        {p.description}
+                     </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      </main>
     </div>
   );
 }

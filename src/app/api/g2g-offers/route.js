@@ -66,7 +66,7 @@ export async function PATCH(req) {
 
   try {
     const body = await req.json();
-    const { offerId, price, stock, active } = body;
+    const { offerId, price, stock, active, status } = body;
 
     if (!offerId) {
       return NextResponse.json({ error: "Offer ID is required" }, { status: 400 });
@@ -75,7 +75,8 @@ export async function PATCH(req) {
     const payload = {};
     if (price !== undefined) payload.unit_price = Number(price);
     if (stock !== undefined) payload.api_qty = Number(stock);
-    if (active !== undefined) payload.offer_status = active ? 'live' : 'inactive';
+    if (active !== undefined) payload.offer_status = active ? 'live' : 'offline';
+    if (status !== undefined) payload.status = status; // allow explicit status string like 'live', 'offline', 'inactive'
 
     const path = `/v2/offers/${offerId}`;
     const patchHeaders = generateG2GHeaders(path, g2gApiKey, g2gUserId, g2gSecretKey);
@@ -88,12 +89,10 @@ export async function PATCH(req) {
 
     const data = await response.json();
     
-    // Sometimes G2G returns 200 OK but with an error code inside the payload.
-    if (!response.ok || (data.code !== undefined && String(data.code) !== "1")) {
-       // Many APIs use "1" for success, others use 200. G2G might use something else.
-       // We'll log the full response just in case.
+    // G2G uses 20000001 for success
+    if (!response.ok || (data.code !== undefined && String(data.code) !== "20000001")) {
        console.error("G2G API Error Response:", data);
-       if (!response.ok) throw new Error(data.message || JSON.stringify(data));
+       return NextResponse.json({ error: `Gagal mengubah data penawaran: ${JSON.stringify(data)}` }, { status: 400 });
     }
 
     return NextResponse.json({ success: true, message: "Offer updated successfully", data });
