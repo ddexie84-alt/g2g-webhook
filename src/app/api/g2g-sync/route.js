@@ -78,6 +78,7 @@ export async function POST(req) {
     // Ambil mapping lama agar kita tidak menimpa SMM ID yang sudah diisi pengguna
     const existingMappings = (await redis.hgetall("g2g_smm_mappings")) || {};
     const existingQuantities = (await redis.hgetall("g2g_smm_qty")) || {};
+    const existingNames = (await redis.hgetall("g2g_smm_names")) || {};
 
     let newCount = 0;
 
@@ -87,12 +88,18 @@ export async function POST(req) {
       if (!offerId) continue;
       
       const cleanOfferId = offerId.replace(/^#/, '');
+      
+      // Ambil nama dari G2G (bisa berada di berbagai field tergantung versi API)
+      const offerName = offer.title || offer.offer_title || offer.product_name || offer.description || offer.brand_name || `Produk G2G (ID: ${cleanOfferId})`;
 
       // Jika produk belum pernah dipetakan sebelumnya, tambahkan ke Dashboard
       if (!existingMappings[cleanOfferId]) {
         await redis.hset("g2g_smm_mappings", { [cleanOfferId]: "BELUM_DIPETAKAN" });
         newCount++;
       }
+      
+      // Simpan/Update Namanya agar mudah dikenali di Dashboard
+      await redis.hset("g2g_smm_names", { [cleanOfferId]: offerName });
       
       // Berikan nilai Qty default 1000
       if (!existingQuantities[cleanOfferId]) {
