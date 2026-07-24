@@ -80,7 +80,8 @@ export async function POST(req) {
          method: 'PATCH',
          headers: patchHeaders,
          body: JSON.stringify({
-            delivered_qty: parseInt(qty, 10)
+            delivered_qty: parseInt(qty, 10),
+            delivered_at: Date.now()
          })
        });
     } else {

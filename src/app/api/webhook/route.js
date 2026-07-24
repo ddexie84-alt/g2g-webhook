@@ -96,7 +96,10 @@ async function deliverG2GOrder(orderId, deliveryIdFromPayload, qty = 1) {
        await fetch(`https://open-api.g2g.com${patchPath}`, {
          method: 'PATCH',
          headers: patchHeaders,
-         body: JSON.stringify({ delivered_qty: parseInt(qty, 10) })
+         body: JSON.stringify({ 
+             delivered_qty: parseInt(qty, 10),
+             delivered_at: Date.now()
+         })
        });
     } else {
        const postHeaders = generateG2GHeaders(`/v2/orders/${orderId}/delivery`, g2gApiKey, g2gUserId, g2gSecretKey);
