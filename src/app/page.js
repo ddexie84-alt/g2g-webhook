@@ -609,7 +609,7 @@ export default function AdminDashboard() {
                               const status = parsedOrder.rawG2G?.payload?.order_status || parsedOrder.rawG2G?.event || parsedOrder.rawG2G?.event_type || parsedOrder.rawG2G?.type;
                               const isPaid = status === 'order.api_delivery' || status === 'order.confirmed' || status === 'paid' || status === 'delivering';
                               
-                              if (!parsedOrder.success && parsedOrder.g2gOrderId && !parsedOrder.g2gOrderId.startsWith('TEST') && isPaid) {
+                              if (parsedOrder.g2gOrderId && !parsedOrder.g2gOrderId.startsWith('TEST') && isPaid) {
                                 return (
                                   <button 
                                     style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'var(--success)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer'}} 
