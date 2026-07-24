@@ -69,8 +69,11 @@ async function deliverG2GOrder(orderId, deliveryIdFromPayload, qty = 1) {
       const getResp = await fetch(`https://open-api.g2g.com/v2/orders/${orderId}/delivery`, { method: 'GET', headers: getHeaders });
       if (getResp.ok) {
         const getRespBody = await getResp.json();
-        if (getRespBody && getRespBody.payload && getRespBody.payload.length > 0) {
-           finalDeliveryId = getRespBody.payload[0].delivery_id;
+        if (getRespBody && getRespBody.payload && Array.isArray(getRespBody.payload.delivery_list) && getRespBody.payload.delivery_list.length > 0) {
+           const firstDelivery = getRespBody.payload.delivery_list[0];
+           if (firstDelivery.delivery_summary && firstDelivery.delivery_summary.delivery_id) {
+               finalDeliveryId = firstDelivery.delivery_summary.delivery_id;
+           }
         } else if (getRespBody && getRespBody.payload && getRespBody.payload.delivery_id) {
            finalDeliveryId = getRespBody.payload.delivery_id;
         }

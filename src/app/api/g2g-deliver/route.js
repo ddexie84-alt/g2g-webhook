@@ -45,10 +45,13 @@ export async function POST(req) {
     if (getResp.ok) {
       const getRespBody = await getResp.json();
       debugInfo = JSON.stringify(getRespBody);
-      // Asumsi format array atau object dengan id.
-      // Jika V2 mengembalikan array deliveries:
-      if (getRespBody && getRespBody.payload && Array.isArray(getRespBody.payload) && getRespBody.payload.length > 0) {
-         deliveryId = getRespBody.payload[0].delivery_id;
+      
+      // Struktur Asli G2G V2
+      if (getRespBody && getRespBody.payload && Array.isArray(getRespBody.payload.delivery_list) && getRespBody.payload.delivery_list.length > 0) {
+         const firstDelivery = getRespBody.payload.delivery_list[0];
+         if (firstDelivery.delivery_summary && firstDelivery.delivery_summary.delivery_id) {
+             deliveryId = firstDelivery.delivery_summary.delivery_id;
+         }
       } else if (getRespBody && getRespBody.payload && getRespBody.payload.delivery_id) {
          deliveryId = getRespBody.payload.delivery_id;
       }
