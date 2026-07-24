@@ -54,6 +54,46 @@ async function deliverG2GOrder(orderId) {
 
 export async function POST(req) {
   try {
+    // === SISTEM KEAMANAN WEBHOOK (WAJIB) ===
+    const secretOrder = process.env.G2G_WEBHOOK_SECRET;
+    const secretOffer = process.env.G2G_WEBHOOK_SECRET_OFFER;
+    const webhookUrl = process.env.G2G_WEBHOOK_URL;
+    const userId = process.env.G2G_USER_ID;
+
+    if ((secretOrder || secretOffer) && webhookUrl && userId) {
+      const signatureHeader = req.headers.get('g2g-signature');
+      const timestampHeader = req.headers.get('g2g-timestamp');
+      
+      if (!signatureHeader || !timestampHeader) {
+        console.error("Webhook Ditolak: Header Keamanan G2G Hilang!");
+        return NextResponse.json({ error: "Akses Ditolak: G2G Headers tidak ditemukan!" }, { status: 401 });
+      }
+      
+      const canonicalString = webhookUrl + userId + timestampHeader;
+      
+      let isValid = false;
+      
+      // Coba cocokkan dengan Secret Order
+      if (secretOrder) {
+        const expectedOrder = crypto.createHmac('sha256', secretOrder).update(canonicalString).digest('hex');
+        if (expectedOrder === signatureHeader) isValid = true;
+      }
+      
+      // Coba cocokkan dengan Secret Offer (jika Order tidak cocok)
+      if (secretOffer && !isValid) {
+        const expectedOffer = crypto.createHmac('sha256', secretOffer).update(canonicalString).digest('hex');
+        if (expectedOffer === signatureHeader) isValid = true;
+      }
+      
+      if (!isValid) {
+        console.error("Webhook Ditolak: Signature Palsu!", { received: signatureHeader });
+        return NextResponse.json({ error: "Akses Ditolak: G2G Signature tidak valid (POTENSI SERANGAN)!" }, { status: 401 });
+      }
+    } else {
+      console.warn("⚠️ PERINGATAN KRITIS: G2G_WEBHOOK_SECRET atau G2G_WEBHOOK_URL belum disetel di Environment Variables Vercel! Webhook Anda saat ini terbuka untuk publik tanpa sistem keamanan!");
+    }
+    // === AKHIR SISTEM KEAMANAN ===
+
     const rawBody = await req.json();
     const eventType = rawBody.event || rawBody.type || rawBody.event_type || 'UNKNOWN_EVENT'; 
     
