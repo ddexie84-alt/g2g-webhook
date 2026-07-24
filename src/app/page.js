@@ -179,7 +179,7 @@ export default function AdminDashboard() {
       } else {
         setAlertInfo({ 
           title: 'Sinkronisasi Gagal', 
-          message: data.message || data.error || 'Terjadi kesalahan sistem.', 
+          message: (data.message || data.error || 'Terjadi kesalahan sistem.') + (data.debug ? `\n\n[DEBUG G2G]: ${JSON.stringify(data.debug)}` : ''), 
           type: 'error' 
         });
       }

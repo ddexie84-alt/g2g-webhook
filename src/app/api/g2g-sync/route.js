@@ -43,6 +43,7 @@ export async function POST(req) {
       offers = data.data;
     }
 
+    let fallbackData = null;
     if (offers.length === 0) {
       // Jika POST /search gagal mengembalikan array, kita coba Fallback ke GET /offers
       const fallbackRes = await fetch('https://open-api.g2g.com/v2/offers', {
@@ -53,17 +54,18 @@ export async function POST(req) {
           'g2g-userid': g2gUserId
         }
       });
-      const fallbackData = await fallbackRes.json();
+      fallbackData = await fallbackRes.json();
       if (fallbackData.payload && Array.isArray(fallbackData.payload.results)) offers = fallbackData.payload.results;
       else if (fallbackData.payload && Array.isArray(fallbackData.payload)) offers = fallbackData.payload;
     }
 
     if (offers.length === 0) {
        return NextResponse.json({ 
-         success: true, 
+         success: false, 
          count: 0, 
-         message: "Koneksi sukses, tetapi tidak ada produk yang ditemukan di G2G Anda, atau API G2G mengembalikan format yang tidak didukung." 
-       });
+         message: "Gagal menarik data dari G2G.",
+         debug: { postResponse: data, getResponse: fallbackData }
+       }, { status: 400 });
     }
 
     // Ambil mapping lama agar kita tidak menimpa SMM ID yang sudah diisi pengguna
