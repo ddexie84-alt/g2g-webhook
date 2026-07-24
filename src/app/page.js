@@ -14,6 +14,7 @@ export default function AdminDashboard() {
   const [newSmmQty, setNewSmmQty] = useState("");
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -30,8 +31,8 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [mapsRes, ordersRes, profileRes] = await Promise.all([
         fetch("/api/products"),
@@ -53,8 +54,19 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error("Failed to fetch data", error);
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
+
+  // Auto-Refresh (Polling) setiap 15 detik untuk mendapatkan data terbaru tanpa perlu reload manual
+  useEffect(() => {
+    let interval;
+    if (isAuthenticated) {
+      interval = setInterval(() => {
+        fetchData(true);
+      }, 15000);
+    }
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
 
   // Step 1: Validate
   const initiateAddMapping = async (e) => {
@@ -151,6 +163,62 @@ export default function AdminDashboard() {
     }
   };
 
+  const syncG2G = async () => {
+    setIsSyncing(true);
+    setAlertInfo(null);
+    try {
+      const res = await fetch('/api/g2g-sync', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAlertInfo({ 
+          title: 'Sinkronisasi Berhasil', 
+          message: `Ditemukan total ${data.total} produk di G2G. ${data.count} produk baru berhasil ditarik ke Dashboard!`, 
+          type: 'success' 
+        });
+        fetchData();
+      } else {
+        setAlertInfo({ 
+          title: 'Sinkronisasi Gagal', 
+          message: data.message || data.error || 'Terjadi kesalahan sistem.', 
+          type: 'error' 
+        });
+      }
+    } catch (error) {
+      setAlertInfo({ title: 'Koneksi Gagal', message: 'Tidak dapat menghubungi server Vercel Anda.', type: 'error' });
+    }
+    setIsSyncing(false);
+  };
+
+  const getG2gStatusBadge = (statusOrEvent) => {
+    switch(statusOrEvent) {
+      case 'unpaid':
+      case 'order.created': 
+        return { label: 'Belum Dibayar', color: '#d97706', bg: '#fef3c7' };
+      case 'paid':
+      case 'order.confirmed': 
+        return { label: 'Sudah Dibayar', color: '#1d4ed8', bg: '#dbeafe' };
+      case 'start_delivering':
+        return { label: 'Persiapan Kirim', color: '#4338ca', bg: '#e0e7ff' };
+      case 'delivering':
+      case 'order.api_delivery': 
+        return { label: 'Sedang Dikirim', color: '#6d28d9', bg: '#ede9fe' };
+      case 'awaiting_buyer_confirmation':
+      case 'order.delivered': 
+        return { label: 'Menunggu Konfirmasi', color: '#c2410c', bg: '#ffedd5' };
+      case 'delivered':
+      case 'partial_delivered':
+      case 'order.completed': 
+        return { label: 'Terkirim Selesai', color: '#047857', bg: '#d1fae5' };
+      case 'cancelled':
+      case 'order.cancelled': 
+        return { label: 'Dibatalkan', color: '#b91c1c', bg: '#fee2e2' };
+      case 'refunded':
+        return { label: 'Dana Dikembalikan', color: '#be123c', bg: '#ffe4e6' };
+      default: 
+        return { label: statusOrEvent || 'Tidak Diketahui', color: '#374151', bg: '#f3f4f6' };
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="auth-overlay">
@@ -212,10 +280,21 @@ export default function AdminDashboard() {
       <div className="grid">
         {/* Left Column: Product Mapping */}
         <div className="card">
-          <h2>📦 Pengelola Produk</h2>
-          <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem'}}>
-            Pasangkan ID Produk G2G dengan ID Layanan SMM Panel beserta Pengali Jumlahnya.
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <h2 style={{ marginBottom: '0.25rem' }}>📦 Pengelola Produk</h2>
+              <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0}}>
+                Pasangkan ID Produk G2G dengan ID Layanan SMM.
+              </p>
+            </div>
+            <button 
+              onClick={syncG2G} 
+              disabled={isSyncing}
+              style={{ backgroundColor: 'var(--success)', border: 'none', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+            >
+              {isSyncing ? '⏳ Menyinkronkan...' : '🔄 Tarik Data dari G2G'}
+            </button>
+          </div>
           
           <form onSubmit={initiateAddMapping} style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem'}}>
             <input 
@@ -319,9 +398,29 @@ export default function AdminDashboard() {
                         </td>
                         <td style={{fontFamily: 'monospace'}}>{parsedOrder.g2gOrderId}</td>
                         <td>
-                          <span className={`badge ${parsedOrder.success ? 'success' : 'error'}`}>
-                            {parsedOrder.success ? 'SUKSES' : 'ERROR'}
-                          </span>
+                          {(() => {
+                            const statusOrEvent = parsedOrder.rawG2G?.payload?.order_status || parsedOrder.rawG2G?.event || parsedOrder.rawG2G?.event_type || parsedOrder.rawG2G?.type;
+                            const badge = getG2gStatusBadge(statusOrEvent);
+                            return (
+                              <div style={{display: 'flex', flexDirection: 'column', gap: '6px'}}>
+                                <span style={{
+                                  backgroundColor: badge.bg, 
+                                  color: badge.color, 
+                                  padding: '4px 8px', 
+                                  borderRadius: '12px', 
+                                  fontSize: '0.75rem', 
+                                  fontWeight: 'bold',
+                                  display: 'inline-block',
+                                  width: 'fit-content'
+                                }}>
+                                  {badge.label}
+                                </span>
+                                <div style={{fontSize: '0.7rem', color: 'var(--text-muted)'}}>
+                                  {parsedOrder.success ? '✅ SMM Sukses' : '❌ SMM Dilewati/Gagal'}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td>
                           <button 
@@ -403,7 +502,25 @@ export default function AdminDashboard() {
         <div className="auth-overlay" onClick={() => setSelectedOrder(null)}>
           <div className="auth-card" style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left', cursor: 'default' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ marginBottom: '0' }}>🔍 Detail Log Transaksi</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <h2 style={{ marginBottom: '0' }}>🔍 Detail Log</h2>
+                {(() => {
+                  const statusOrEvent = selectedOrder.rawG2G?.payload?.order_status || selectedOrder.rawG2G?.event || selectedOrder.rawG2G?.event_type || selectedOrder.rawG2G?.type;
+                  const badge = getG2gStatusBadge(statusOrEvent);
+                  return (
+                    <span style={{
+                      backgroundColor: badge.bg, 
+                      color: badge.color, 
+                      padding: '4px 12px', 
+                      borderRadius: '12px', 
+                      fontSize: '0.8rem', 
+                      fontWeight: 'bold',
+                    }}>
+                      {badge.label}
+                    </span>
+                  );
+                })()}
+              </div>
               <button className="danger" style={{ padding: '0.25rem 0.5rem' }} onClick={() => setSelectedOrder(null)}>Tutup</button>
             </div>
             
