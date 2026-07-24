@@ -748,15 +748,21 @@ export default function AdminDashboard() {
                         )}
                       </td>
                       <td>
-                        <span style={{
-                          padding: '0.2rem 0.5rem', 
-                          borderRadius: '4px', 
-                          fontSize: '0.8rem',
-                          backgroundColor: (o.offer_status === 'active' || o.active || o.status === 'active') ? '#d1fae5' : '#fee2e2',
-                          color: (o.offer_status === 'active' || o.active || o.status === 'active') ? '#047857' : '#b91c1c'
-                        }}>
-                          {(o.offer_status === 'active' || o.active || o.status === 'active') ? 'Aktif' : 'Nonaktif'}
-                        </span>
+                        {(() => {
+                          const rawStatus = o.offer_status ?? o.status ?? o.active ?? o.display ?? 'unknown';
+                          const isActive = String(rawStatus).toLowerCase() === 'active' || String(rawStatus).toLowerCase() === 'online' || rawStatus === 1 || rawStatus === true;
+                          return (
+                            <span style={{
+                              padding: '0.2rem 0.5rem', 
+                              borderRadius: '4px', 
+                              fontSize: '0.8rem',
+                              backgroundColor: isActive ? '#d1fae5' : '#fee2e2',
+                              color: isActive ? '#047857' : '#b91c1c'
+                            }}>
+                              {isActive ? 'Aktif' : `Nonaktif (${rawStatus})`}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td style={{textAlign: 'right'}}>
                         {editingOffer === (o.offer_id || o.id) ? (
@@ -767,9 +773,15 @@ export default function AdminDashboard() {
                         ) : (
                           <div style={{display: 'flex', gap: '4px', justifyContent: 'flex-end'}}>
                             <button onClick={() => { setEditingOffer(o.offer_id || o.id); setEditOfferPrice(o.unit_price || o.price); setEditOfferStock(o.available_qty || o.api_qty || o.stock || 0); }} style={{padding: '0.3rem', fontSize: '0.8rem'}}>Ubah</button>
-                            <button onClick={() => updateOffer(o.offer_id || o.id, { active: !(o.offer_status === 'active' || o.active || o.status === 'active') })} style={{padding: '0.3rem', fontSize: '0.8rem', backgroundColor: (o.offer_status === 'active' || o.active || o.status === 'active') ? '#f59e0b' : '#10b981', color: 'white', border: 'none'}}>
-                              {(o.offer_status === 'active' || o.active || o.status === 'active') ? 'Jeda' : 'Aktifkan'}
-                            </button>
+                            {(() => {
+                              const rawStatus = o.offer_status ?? o.status ?? o.active ?? o.display ?? 'unknown';
+                              const isActive = String(rawStatus).toLowerCase() === 'active' || String(rawStatus).toLowerCase() === 'online' || rawStatus === 1 || rawStatus === true;
+                              return (
+                                <button onClick={() => updateOffer(o.offer_id || o.id, { active: !isActive })} style={{padding: '0.3rem', fontSize: '0.8rem', backgroundColor: isActive ? '#f59e0b' : '#10b981', color: 'white', border: 'none'}}>
+                                  {isActive ? 'Jeda' : 'Aktifkan'}
+                                </button>
+                              );
+                            })()}
                           </div>
                         )}
                       </td>
