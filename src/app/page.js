@@ -386,29 +386,32 @@ export default function AdminDashboard() {
                           )}
                         </td>
                         <td style={{textAlign: 'right'}}>
-                          <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
-                            <button 
-                              style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--primary)', border: 'none', color: 'white', cursor: 'pointer'}} 
-                              onClick={() => {
-                                setNewG2gId(g2g);
-                                setNewSmmId('');
-                                setNewSmmQty(1000);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                              }}>
-                              Set SMM
-                            </button>
-                            <button 
-                              style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--text-muted)', border: 'none', color: 'white', cursor: 'pointer'}} 
-                              onClick={() => {
-                                setNewG2gId(g2g);
-                                setNewSmmId('NON_SMM');
-                                setNewSmmQty(1);
-                                setConfirmInfo({ g2gId: g2g, smmId: 'NON_SMM', smmName: 'Produk Digital / Akun (Tidak Butuh SMM)', smmPrice: '0', smmQty: 1 });
-                              }}>
-                              Abaikan (Non-SMM)
-                            </button>
-                            <button className="danger" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
-                          </div>
+                          {editingRow === g2g ? (
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                              <input type="text" placeholder="ID SMM" value={inlineSmmId} onChange={e => setInlineSmmId(e.target.value)} style={{padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.8rem'}} />
+                              <input type="number" placeholder="Qty (SMM)" value={inlineSmmQty} onChange={e => setInlineSmmQty(e.target.value)} style={{padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.8rem'}} />
+                              <button style={{padding: '0.4rem', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => initiateAddMapping(null, g2g, inlineSmmId, inlineSmmQty)}>Simpan</button>
+                              <button style={{padding: '0.4rem', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => setEditingRow(null)}>Batal</button>
+                            </div>
+                          ) : (
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                              <button 
+                                style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--primary)', border: 'none', color: 'white', cursor: 'pointer'}} 
+                                onClick={() => {
+                                  setEditingRow(g2g);
+                                  setInlineSmmId('');
+                                  setInlineSmmQty(1000);
+                                }}>
+                                ✏️ Edit
+                              </button>
+                              <button 
+                                style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--text-muted)', border: 'none', color: 'white', cursor: 'pointer'}} 
+                                onClick={() => initiateAddMapping(null, g2g, 'NON_SMM', 1)}>
+                                Abaikan (Non-SMM)
+                              </button>
+                              <button className="danger" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))
