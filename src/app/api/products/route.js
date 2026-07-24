@@ -11,7 +11,8 @@ export async function GET() {
     const mappings = await redis.hgetall('g2g_smm_mappings') || {};
     const names = await redis.hgetall('g2g_smm_names') || {};
     const quantities = await redis.hgetall('g2g_smm_qty') || {};
-    return NextResponse.json({ mappings, names, quantities });
+    const providers = await redis.hgetall('g2g_provider_mappings') || {};
+    return NextResponse.json({ mappings, names, quantities, providers });
   } catch (error) {
     console.error("KV GET Error:", error);
     return NextResponse.json({ error: "Failed to fetch mappings" }, { status: 500 });
@@ -20,10 +21,11 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { g2gId, smmId, smmName, smmQty } = await request.json();
+    const { g2gId, smmId, smmName, smmQty, providerId = 'PUSATPANELSMM' } = await request.json();
     if (!g2gId || !smmId) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     
     await redis.hset('g2g_smm_mappings', { [g2gId]: smmId });
+    await redis.hset('g2g_provider_mappings', { [g2gId]: providerId });
     if (smmName) {
       await redis.hset('g2g_smm_names', { [g2gId]: smmName });
     }
@@ -49,6 +51,7 @@ export async function DELETE(request) {
     await redis.hdel('g2g_smm_mappings', id);
     await redis.hdel('g2g_smm_names', id);
     await redis.hdel('g2g_smm_qty', id);
+    await redis.hdel('g2g_provider_mappings', id);
     
     return NextResponse.json({ success: true });
   } catch (error) {

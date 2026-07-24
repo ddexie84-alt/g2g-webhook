@@ -54,7 +54,7 @@ async function saveOrderLog(orderData) {
   }
 }
 
-async function deliverG2GOrder(orderId) {
+async function deliverG2GOrder(orderId, qty = 1) {
   const g2gApiKey = process.env.G2G_OPENAPI_KEY;
   const g2gUserId = process.env.G2G_USER_ID;
   const g2gSecretKey = process.env.G2G_SECRET;
@@ -67,7 +67,7 @@ async function deliverG2GOrder(orderId) {
       method: 'POST',
       headers: postHeaders,
       body: JSON.stringify({
-         "delivered_quantity": 1, 
+         "delivered_quantity": qty, 
          "remarks": "✅ Pesanan Anda telah diterima oleh sistem server kami dan sedang masuk antrean proses. Estimasi masuknya layanan adalah 1 hingga 24 jam. Mohon bersabar dan jangan membuka komplain sebelum 24 jam. Terima kasih!"
       })
     });
@@ -183,7 +183,7 @@ export async function POST(req) {
 
           if (smmResult.status === true || smmResult.data?.id) {
             success = true;
-            if (orderId) await deliverG2GOrder(orderId);
+            if (orderId) await deliverG2GOrder(orderId, purchasedQty);
           }
         } catch (smmError) {
           console.error("SMM Error", smmError);

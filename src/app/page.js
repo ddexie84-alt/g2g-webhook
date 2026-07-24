@@ -7,6 +7,8 @@ export default function AdminDashboard() {
   const [mappings, setMappings] = useState({});
   const [names, setNames] = useState({});
   const [quantities, setQuantities] = useState({});
+  const [productProviders, setProductProviders] = useState({});
+  const [apiProviders, setApiProviders] = useState({});
   const [orders, setOrders] = useState([]);
   const [profile, setProfile] = useState(null);
   const [newG2gId, setNewG2gId] = useState("");
@@ -15,6 +17,9 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [activeTab, setActiveTab] = useState('pemetaan');
+  const [g2gOffers, setG2gOffers] = useState([]);
+  const [isFetchingOffers, setIsFetchingOffers] = useState(false);
   
   // Inline Editing States
   const [editingRow, setEditingRow] = useState(null);
@@ -26,6 +31,8 @@ export default function AdminDashboard() {
   const [alertInfo, setAlertInfo] = useState(null); // { type: 'error' | 'success', title: '', message: '' }
   const [confirmInfo, setConfirmInfo] = useState(null); // { g2gId, smmId, smmName, smmPrice, smmQty }
 
+  const fetchG2gOffers = async () => { setIsFetchingOffers(true); try { const res = await fetch('/api/g2g-offers'); const data = await res.json(); if(data.success) setG2gOffers(data.offers); } catch(e){} setIsFetchingOffers(false); };
+  useEffect(() => { if(activeTab === 'etalase') fetchG2gOffers(); }, [activeTab]);
   const handleLogin = (e) => {
     e.preventDefault();
     if (password === "admin123") {
@@ -39,18 +46,22 @@ export default function AdminDashboard() {
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [mapsRes, ordersRes, profileRes] = await Promise.all([
+      const [mapsRes, ordersRes, profileRes, providersRes] = await Promise.all([
         fetch("/api/products"),
         fetch("/api/orders"),
-        fetch("/api/profile")
+        fetch("/api/profile"),
+        fetch("/api/providers")
       ]);
       const mapsData = await mapsRes.json();
       const ordersData = await ordersRes.json();
       const profileData = await profileRes.json();
+      const providersData = await providersRes.json();
       
       setMappings(mapsData.mappings || {});
       setNames(mapsData.names || {});
       setQuantities(mapsData.quantities || {});
+      setProductProviders(mapsData.providers || {});
+      setApiProviders(providersData.providers || {});
       setOrders(ordersData.orders || []);
       
       if (profileData.data) {
@@ -302,6 +313,13 @@ export default function AdminDashboard() {
         </div>
       </header>
 
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid #e5e7eb' }}>
+        <button onClick={() => setActiveTab('pemetaan')} style={{ backgroundColor: 'transparent', color: activeTab === 'pemetaan' ? 'var(--primary)' : 'var(--text-muted)', border: 'none', borderBottom: activeTab === 'pemetaan' ? '2px solid var(--primary)' : '2px solid transparent', padding: '0.5rem 1rem', fontSize: '1rem', cursor: 'pointer' }}>📦 Pemetaan Produk</button>
+        <button onClick={() => setActiveTab('etalase')} style={{ backgroundColor: 'transparent', color: activeTab === 'etalase' ? 'var(--primary)' : 'var(--text-muted)', border: 'none', borderBottom: activeTab === 'etalase' ? '2px solid var(--primary)' : '2px solid transparent', padding: '0.5rem 1rem', fontSize: '1rem', cursor: 'pointer' }}>🏪 Etalase G2G</button>
+      </div>
+
+      {activeTab === 'pemetaan' && (
+      <>
       <div className="grid">
         {/* Left Column: Product Mapping */}
         <div className="card">
@@ -615,8 +633,8 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
-
-
+      </>
+      )}
 
       {/* Log Modal */}
       {selectedOrder && (
@@ -691,6 +709,55 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'etalase' && (
+        <div className="card">
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+            <h2 style={{margin: 0}}>Etalase G2G Aktif</h2>
+            <button onClick={fetchG2gOffers} disabled={isFetchingOffers} style={{padding: '0.5rem 1rem', borderRadius: '4px'}}>
+              {isFetchingOffers ? 'Memuat...' : '🔄 Refresh Data'}
+            </button>
+          </div>
+          {isFetchingOffers && g2gOffers.length === 0 ? <p>Membaca data etalase langsung dari G2G API...</p> : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID Penawaran</th>
+                    <th>Nama Penawaran</th>
+                    <th>Harga Jual</th>
+                    <th>Stok</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g2gOffers.length === 0 ? (
+                    <tr><td colSpan="5" className="empty-state">Tidak ada penawaran ditemukan</td></tr>
+                  ) : g2gOffers.map(o => (
+                    <tr key={o.offer_id || o.id}>
+                      <td style={{fontFamily: 'monospace', color: 'var(--accent)'}}>{o.offer_id || o.id}</td>
+                      <td>{o.title || o.offer_title || 'Penawaran G2G'}</td>
+                      <td>{o.currency} {o.price}</td>
+                      <td>{o.stock}</td>
+                      <td>
+                        <span style={{
+                          padding: '0.2rem 0.5rem', 
+                          borderRadius: '4px', 
+                          fontSize: '0.8rem',
+                          backgroundColor: (o.active || o.status === 'active') ? '#d1fae5' : '#fee2e2',
+                          color: (o.active || o.status === 'active') ? '#047857' : '#b91c1c'
+                        }}>
+                          {(o.active || o.status === 'active') ? 'Aktif' : 'Nonaktif'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
