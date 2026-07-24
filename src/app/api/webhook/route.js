@@ -132,11 +132,17 @@ export async function POST(req) {
     let targetLink = payload.buyer_note;
     if (!targetLink && payload.delivery_summary && Array.isArray(payload.delivery_summary.delivery_method_list)) {
       const method = payload.delivery_summary.delivery_method_list[0];
-      if (method && method.value) {
-        targetLink = method.value;
+      if (method) {
+        targetLink = method.attribute_value || method.value || method.delivery_info_1;
+      }
+      
+      // Jika ada info tambahan (misal Server Name)
+      if (payload.delivery_summary.delivery_method_list[1]) {
+         const method2 = payload.delivery_summary.delivery_method_list[1];
+         targetLink += " " + (method2.attribute_value || method2.value || "");
       }
     }
-    targetLink = targetLink || 'LINK_TIDAK_DITEMUKAN';
+    targetLink = targetLink ? String(targetLink).trim() : 'LINK_TIDAK_DITEMUKAN';
     
     const purchasedQty = parseInt(payload.purchased_qty || payload.quantity || 1, 10);
 
@@ -154,8 +160,8 @@ export async function POST(req) {
     let success = false;
     let smmRawResponse = null;
 
-    // 3. Eksekusi jika pesanan lunas
-    if (eventType === 'order.confirmed' || eventType === 'order.api_delivery') {
+    // 3. Eksekusi jika webhook mengindikasikan siap dikirim (api_delivery memiliki data lengkap pembeli)
+    if (eventType === 'order.api_delivery') {
       const smmApiKey = process.env.PUSATPANELSMM_API_KEY || 'API_KEY_SMM_ANDA';
       const smmSecretKey = process.env.PUSATPANELSMM_SECRET_KEY || 'SECRET_KEY_SMM_ANDA';
 
@@ -193,10 +199,14 @@ export async function POST(req) {
         smmRawResponse = { error: "Link Target tidak ditemukan dari G2G (buyer_note kosong)" };
       }
     } else {
-      // Ini adalah event test atau pesanan belum dibayar.
-      smmRawResponse = { 
-        message: `[SIMULASI BERHASIL] Pesanan '${eventType}' terdeteksi. Karena belum lunas, pesanan tidak diteruskan. Jika lunas, sistem akan otomatis mengirimkannya ke SMM ID: ${smmServiceId} dengan Jumlah: ${totalSmmQuantity}` 
-      };
+      // Event lain seperti order.confirmed atau tes
+      if (eventType === 'order.confirmed') {
+        smmRawResponse = { message: "Pesanan lunas (order.confirmed) terdeteksi. Menunggu event 'order.api_delivery' dari G2G untuk mendapatkan Link Target pembeli sebelum dikirim ke SMM." };
+      } else {
+        smmRawResponse = { 
+          message: `Event '${eventType}' terdeteksi. Sistem tidak akan memproses pesanan SMM pada event ini. (Jika ini simulasi, koneksi webhook berjalan lancar!)` 
+        };
+      }
     }
 
     // 4. Save order record to KV for the Dashboard (Selalu dicatat apapun eventnya)
