@@ -63,6 +63,8 @@ async function deliverG2GOrder(orderId, deliveryIdFromPayload, qty = 1) {
 
   try {
     let finalDeliveryId = deliveryIdFromPayload;
+    let isDirectTopUp = false;
+    
     if (!finalDeliveryId) {
       // Coba dapatkan dari API
       const getHeaders = generateG2GHeaders(`/v2/orders/${orderId}/delivery`, g2gApiKey, g2gUserId, g2gSecretKey);
@@ -73,6 +75,9 @@ async function deliverG2GOrder(orderId, deliveryIdFromPayload, qty = 1) {
            const firstDelivery = getRespBody.payload.delivery_list[0];
            if (firstDelivery.delivery_summary && firstDelivery.delivery_summary.delivery_id) {
                finalDeliveryId = firstDelivery.delivery_summary.delivery_id;
+               if (firstDelivery.delivery_summary.delivery_method_code === "direct_top_up") {
+                   isDirectTopUp = true;
+               }
            }
         } else if (getRespBody && getRespBody.payload && getRespBody.payload.delivery_id) {
            finalDeliveryId = getRespBody.payload.delivery_id;
@@ -85,21 +90,31 @@ async function deliverG2GOrder(orderId, deliveryIdFromPayload, qty = 1) {
        return;
     }
 
-    const postHeaders = generateG2GHeaders(`/v2/orders/${orderId}/delivery`, g2gApiKey, g2gUserId, g2gSecretKey);
-    await fetch(`https://open-api.g2g.com/v2/orders/${orderId}/delivery`, {
-      method: 'POST',
-      headers: postHeaders,
-      body: JSON.stringify({
-         delivery_id: finalDeliveryId, 
-         codes: [
-            {
-               content: "✅ Pesanan Anda telah diterima dan diproses oleh sistem.",
-               content_type: "text/plain",
-               reference_id: "AUTO-" + Date.now()
-            }
-         ]
-      })
-    });
+    if (isDirectTopUp) {
+       const patchPath = `/v2/orders/${orderId}/delivery/${finalDeliveryId}`;
+       const patchHeaders = generateG2GHeaders(patchPath, g2gApiKey, g2gUserId, g2gSecretKey);
+       await fetch(`https://open-api.g2g.com${patchPath}`, {
+         method: 'PATCH',
+         headers: patchHeaders,
+         body: JSON.stringify({ delivered_qty: parseInt(qty, 10) })
+       });
+    } else {
+       const postHeaders = generateG2GHeaders(`/v2/orders/${orderId}/delivery`, g2gApiKey, g2gUserId, g2gSecretKey);
+       await fetch(`https://open-api.g2g.com/v2/orders/${orderId}/delivery`, {
+         method: 'POST',
+         headers: postHeaders,
+         body: JSON.stringify({
+            delivery_id: finalDeliveryId, 
+            codes: [
+               {
+                  content: "✅ Pesanan Anda telah diterima dan diproses oleh sistem.",
+                  content_type: "text/plain",
+                  reference_id: "AUTO-" + Date.now()
+               }
+            ]
+         })
+       });
+    }
   } catch (err) {
     console.error("Gagal Auto-Deliver ke G2G:", err);
   }

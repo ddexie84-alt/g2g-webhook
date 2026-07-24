@@ -41,6 +41,7 @@ export async function POST(req) {
     
     let deliveryId = '';
     let debugInfo = '';
+    let isDirectTopUp = false;
     
     if (getResp.ok) {
       const getRespBody = await getResp.json();
@@ -51,6 +52,9 @@ export async function POST(req) {
          const firstDelivery = getRespBody.payload.delivery_list[0];
          if (firstDelivery.delivery_summary && firstDelivery.delivery_summary.delivery_id) {
              deliveryId = firstDelivery.delivery_summary.delivery_id;
+             if (firstDelivery.delivery_summary.delivery_method_code === "direct_top_up") {
+                 isDirectTopUp = true;
+             }
          }
       } else if (getRespBody && getRespBody.payload && getRespBody.payload.delivery_id) {
          deliveryId = getRespBody.payload.delivery_id;
@@ -65,23 +69,39 @@ export async function POST(req) {
       return NextResponse.json({ error: `delivery_id tidak ditemukan pada pesanan ini. Respons G2G: ${debugInfo}` }, { status: 400 });
     }
 
-    // 2. Lakukan POST Delivery menggunakan delivery_id dan codes
-    const postPath = `/v2/orders/${orderId}/delivery`;
-    const postHeaders = generateG2GHeaders(postPath, g2gApiKey, g2gUserId, g2gSecretKey);
-    const response = await fetch(`https://open-api.g2g.com${postPath}`, {
-      method: 'POST',
-      headers: postHeaders,
-      body: JSON.stringify({
-        delivery_id: deliveryId,
-        codes: [
-           {
-              content: remarks || "Pesanan telah diproses secara manual dan terkirim.",
-              content_type: "text/plain",
-              reference_id: "MANUAL-" + Date.now()
-           }
-        ]
-      })
-    });
+    // 2. Eksekusi Pengiriman
+    let response;
+    
+    if (isDirectTopUp) {
+       // Untuk Top Up, gunakan PATCH ke endpoint delivery_id
+       const patchPath = `/v2/orders/${orderId}/delivery/${deliveryId}`;
+       const patchHeaders = generateG2GHeaders(patchPath, g2gApiKey, g2gUserId, g2gSecretKey);
+       response = await fetch(`https://open-api.g2g.com${patchPath}`, {
+         method: 'PATCH',
+         headers: patchHeaders,
+         body: JSON.stringify({
+            delivered_qty: parseInt(qty, 10)
+         })
+       });
+    } else {
+       // 2. Lakukan POST Delivery menggunakan delivery_id dan codes
+       const postPath = `/v2/orders/${orderId}/delivery`;
+       const postHeaders = generateG2GHeaders(postPath, g2gApiKey, g2gUserId, g2gSecretKey);
+       response = await fetch(`https://open-api.g2g.com${postPath}`, {
+         method: 'POST',
+         headers: postHeaders,
+         body: JSON.stringify({
+           delivery_id: deliveryId,
+           codes: [
+              {
+                 content: remarks || "Pesanan telah diproses secara manual dan terkirim.",
+                 content_type: "text/plain",
+                 reference_id: "MANUAL-" + Date.now()
+              }
+           ]
+         })
+       });
+    }
 
     const data = await response.json();
     
