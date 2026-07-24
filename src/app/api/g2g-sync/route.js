@@ -1,31 +1,42 @@
 import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
+import crypto from 'crypto';
 
 const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "",
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "",
 });
 
+function generateG2GHeaders(path, apiKey, userId, secretKey) {
+  const timestamp = Date.now().toString();
+  const canonicalString = path + apiKey + userId + timestamp;
+  const signature = crypto.createHmac('sha256', secretKey).update(canonicalString).digest('hex');
+  
+  return {
+    'Content-Type': 'application/json',
+    'g2g-api-key': apiKey,
+    'g2g-userid': userId,
+    'g2g-timestamp': timestamp,
+    'g2g-signature': signature
+  };
+}
+
 export async function POST(req) {
   const g2gApiKey = process.env.G2G_OPENAPI_KEY;
   const g2gUserId = process.env.G2G_USER_ID;
+  const g2gSecretKey = process.env.G2G_SECRET;
 
-  if (!g2gApiKey || !g2gUserId) {
-    return NextResponse.json({ error: "Kunci API G2G (G2G_OPENAPI_KEY) atau User ID (G2G_USER_ID) belum dikonfigurasi di Environment Variables Vercel Anda." }, { status: 400 });
+  if (!g2gApiKey || !g2gUserId || !g2gSecretKey) {
+    return NextResponse.json({ error: "Kunci API G2G (G2G_OPENAPI_KEY, G2G_USER_ID, G2G_SECRET) belum dikonfigurasi di Environment Variables Vercel Anda." }, { status: 400 });
   }
 
   try {
-    // Memanggil API 'Search Offers' dari G2G (Sesuai dokumentasi OpenAPI G2G)
-    // Biasanya ini berupa POST ke /v2/offers/search dengan body kosong atau filter tertentu
+    const postHeaders = generateG2GHeaders('/v2/offers/search', g2gApiKey, g2gUserId, g2gSecretKey);
     const response = await fetch('https://open-api.g2g.com/v2/offers/search', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'g2g-api-key': g2gApiKey,
-        'g2g-userid': g2gUserId
-      },
+      headers: postHeaders,
       body: JSON.stringify({
-        "status": "active" // Coba filter yang aktif saja (jika API mendukung)
+        "status": "active" 
       })
     });
 
@@ -45,14 +56,10 @@ export async function POST(req) {
 
     let fallbackData = null;
     if (offers.length === 0) {
-      // Jika POST /search gagal mengembalikan array, kita coba Fallback ke GET /offers
+      const getHeaders = generateG2GHeaders('/v2/offers', g2gApiKey, g2gUserId, g2gSecretKey);
       const fallbackRes = await fetch('https://open-api.g2g.com/v2/offers', {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'g2g-api-key': g2gApiKey,
-          'g2g-userid': g2gUserId
-        }
+        headers: getHeaders
       });
       fallbackData = await fallbackRes.json();
       if (fallbackData.payload && Array.isArray(fallbackData.payload.results)) offers = fallbackData.payload.results;

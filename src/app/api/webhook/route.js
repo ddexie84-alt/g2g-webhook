@@ -1,16 +1,29 @@
 import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
+import crypto from 'crypto';
 
 const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "",
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "",
 });
 
+function generateG2GHeaders(path, apiKey, userId, secretKey) {
+  const timestamp = Date.now().toString();
+  const canonicalString = path + apiKey + userId + timestamp;
+  const signature = crypto.createHmac('sha256', secretKey).update(canonicalString).digest('hex');
+  
+  return {
+    'Content-Type': 'application/json',
+    'g2g-api-key': apiKey,
+    'g2g-userid': userId,
+    'g2g-timestamp': timestamp,
+    'g2g-signature': signature
+  };
+}
+
 async function saveOrderLog(orderData) {
   try {
-    // Save to the left of the list (newest first)
     await redis.lpush("recent_orders", JSON.stringify(orderData));
-    // Trim list to keep only the latest 100 orders to save space
     await redis.ltrim("recent_orders", 0, 99);
   } catch (err) {
     console.error("Failed to save log to KV", err);
@@ -20,17 +33,15 @@ async function saveOrderLog(orderData) {
 async function deliverG2GOrder(orderId) {
   const g2gApiKey = process.env.G2G_OPENAPI_KEY;
   const g2gUserId = process.env.G2G_USER_ID;
+  const g2gSecretKey = process.env.G2G_SECRET;
   
-  if (!g2gApiKey || !g2gUserId) return;
+  if (!g2gApiKey || !g2gUserId || !g2gSecretKey) return;
 
   try {
+    const postHeaders = generateG2GHeaders(`/v2/orders/${orderId}/delivery`, g2gApiKey, g2gUserId, g2gSecretKey);
     await fetch(`https://open-api.g2g.com/v2/orders/${orderId}/delivery`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'g2g-api-key': g2gApiKey,
-        'g2g-userid': g2gUserId
-      },
+      headers: postHeaders,
       body: JSON.stringify({
          "delivered_quantity": 1, 
          "remarks": "✅ Pesanan Anda telah diterima oleh sistem server kami dan sedang masuk antrean proses. Estimasi masuknya layanan adalah 1 hingga 24 jam. Mohon bersabar dan jangan membuka komplain sebelum 24 jam. Terima kasih!"
