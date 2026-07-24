@@ -265,6 +265,26 @@ export default function AdminDashboard() {
     setIsSyncing(false);
   };
 
+  const deliverManualG2G = async (orderId, qty) => {
+    if (!confirm(`Tandai pesanan ${orderId} sebagai Terkirim di G2G secara manual?`)) return;
+    setAlertInfo({ type: 'success', title: 'Memproses...', message: 'Menghubungi G2G API...' });
+    try {
+      const res = await fetch('/api/g2g-deliver', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, qty })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAlertInfo({ type: 'success', title: 'Berhasil', message: 'Pesanan berhasil ditandai Terkirim di G2G!' });
+      } else {
+        setAlertInfo({ type: 'error', title: 'Gagal', message: data.error || JSON.stringify(data) });
+      }
+    } catch (error) {
+      setAlertInfo({ type: 'error', title: 'Error', message: error.message });
+    }
+  };
+
   const getG2gStatusBadge = (statusOrEvent) => {
     switch(statusOrEvent) {
       case 'unpaid':
@@ -578,12 +598,22 @@ export default function AdminDashboard() {
                           })()}
                         </td>
                         <td>
-                          <button 
-                            style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)'}} 
-                            onClick={() => setSelectedOrder(parsedOrder)}
-                          >
-                            Log API
-                          </button>
+                          <div style={{display: 'flex', gap: '4px'}}>
+                            <button 
+                              style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: '4px', cursor: 'pointer'}} 
+                              onClick={() => setSelectedOrder(parsedOrder)}
+                            >
+                              Log API
+                            </button>
+                            {!parsedOrder.success && parsedOrder.g2gOrderId && !parsedOrder.g2gOrderId.startsWith('TEST') && (
+                              <button 
+                                style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'var(--success)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer'}} 
+                                onClick={() => deliverManualG2G(parsedOrder.g2gOrderId, parsedOrder.purchasedQty || 1)}
+                              >
+                                📦 Force Deliver
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
