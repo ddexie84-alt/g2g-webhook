@@ -40,12 +40,14 @@ export async function POST(req) {
     });
     
     let deliveryId = '';
+    let debugInfo = '';
     
     if (getResp.ok) {
       const getRespBody = await getResp.json();
+      debugInfo = JSON.stringify(getRespBody);
       // Asumsi format array atau object dengan id.
       // Jika V2 mengembalikan array deliveries:
-      if (getRespBody && getRespBody.payload && getRespBody.payload.length > 0) {
+      if (getRespBody && getRespBody.payload && Array.isArray(getRespBody.payload) && getRespBody.payload.length > 0) {
          deliveryId = getRespBody.payload[0].delivery_id;
       } else if (getRespBody && getRespBody.payload && getRespBody.payload.delivery_id) {
          deliveryId = getRespBody.payload.delivery_id;
@@ -57,7 +59,7 @@ export async function POST(req) {
     }
     
     if (!deliveryId) {
-      return NextResponse.json({ error: "delivery_id tidak ditemukan pada pesanan ini. Mungkin pesanan sudah selesai atau belum saatnya dikirim." }, { status: 400 });
+      return NextResponse.json({ error: `delivery_id tidak ditemukan pada pesanan ini. Respons G2G: ${debugInfo}` }, { status: 400 });
     }
 
     // 2. Lakukan POST Delivery menggunakan delivery_id dan codes
