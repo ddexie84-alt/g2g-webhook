@@ -23,8 +23,32 @@ function generateG2GHeaders(path, apiKey, userId, secretKey) {
 
 async function saveOrderLog(orderData) {
   try {
-    await redis.lpush("recent_orders", JSON.stringify(orderData));
-    await redis.ltrim("recent_orders", 0, 99);
+    const rawLogs = await redis.lrange("recent_orders", 0, 99);
+    let logs = rawLogs.map(l => typeof l === 'string' ? JSON.parse(l) : l);
+    
+    const existingIndex = logs.findIndex(l => l.orderId === orderData.orderId && l.orderId !== 'UNKNOWN_ORDER');
+    
+    if (existingIndex >= 0) {
+      // Perbarui log yang sudah ada
+      logs[existingIndex] = { ...logs[existingIndex], ...orderData, timestamp: orderData.timestamp };
+      // Pindahkan ke paling atas (karena baru diupdate)
+      const updatedLog = logs.splice(existingIndex, 1)[0];
+      logs.unshift(updatedLog);
+    } else {
+      // Tambahkan log baru
+      logs.unshift(orderData);
+    }
+    
+    // Potong agar maksimal 100
+    logs = logs.slice(0, 100);
+    
+    const pipeline = redis.pipeline();
+    pipeline.del("recent_orders");
+    if (logs.length > 0) {
+      // lpush takes multiple arguments, but pipeline.lpush takes an array of arguments, we must reverse so unshift order is kept
+      pipeline.rpush("recent_orders", ...logs.map(l => JSON.stringify(l)));
+    }
+    await pipeline.exec();
   } catch (err) {
     console.error("Failed to save log to KV", err);
   }

@@ -16,6 +16,11 @@ export default function AdminDashboard() {
   const [isAdding, setIsAdding] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   
+  // Inline Editing States
+  const [editingRow, setEditingRow] = useState(null);
+  const [inlineSmmId, setInlineSmmId] = useState("");
+  const [inlineSmmQty, setInlineSmmQty] = useState("");
+  
   // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [alertInfo, setAlertInfo] = useState(null); // { type: 'error' | 'success', title: '', message: '' }
@@ -68,19 +73,24 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  const initiateAddMapping = async (e) => {
-    e.preventDefault();
-    if (!newG2gId || !newSmmId || !newSmmQty) return;
+  const initiateAddMapping = async (e, customG2g = null, customSmm = null, customQty = null) => {
+    if (e) e.preventDefault();
+    
+    const targetG2g = customG2g || newG2gId;
+    const targetSmm = customSmm || newSmmId;
+    const targetQty = customQty || newSmmQty;
+    
+    if (!targetG2g || !targetSmm || !targetQty) return;
     
     setIsAdding(true);
     
-    if (newSmmId.toUpperCase() === 'NON_SMM') {
+    if (targetSmm.toUpperCase() === 'NON_SMM') {
       setConfirmInfo({
-        g2gId: newG2gId,
+        g2gId: targetG2g,
         smmId: 'NON_SMM',
         smmName: 'Layanan Digital / Akun (Tidak Butuh SMM)',
         smmPrice: '0',
-        smmQty: newSmmQty
+        smmQty: targetQty
       });
       setIsAdding(false);
       return;
@@ -104,13 +114,13 @@ export default function AdminDashboard() {
         return;
       }
 
-      const matchedService = servicesData.find(s => String(s.service) === String(newSmmId) || String(s.id) === String(newSmmId));
+      const matchedService = servicesData.find(s => String(s.service) === String(targetSmm) || String(s.id) === String(targetSmm));
       
       if (!matchedService) {
         setAlertInfo({ 
           type: 'error', 
           title: 'ID Tidak Valid', 
-          message: `Layanan SMM dengan ID "${newSmmId}" TIDAK DITEMUKAN di PusatPanelSMM!` 
+          message: `Layanan SMM dengan ID "${targetSmm}" TIDAK DITEMUKAN di PusatPanelSMM!` 
         });
         setIsAdding(false);
         return;
@@ -121,11 +131,11 @@ export default function AdminDashboard() {
       
       // Open Confirmation Modal instead of browser confirm()
       setConfirmInfo({
-        g2gId: newG2gId,
-        smmId: newSmmId,
+        g2gId: targetG2g,
+        smmId: targetSmm,
         smmName: serviceName,
         smmPrice: servicePrice,
-        smmQty: newSmmQty
+        smmQty: targetQty
       });
       
     } catch (error) {
@@ -152,9 +162,13 @@ export default function AdminDashboard() {
       });
 
       if (res.ok) {
+        // Reset states
         setNewG2gId("");
         setNewSmmId("");
         setNewSmmQty("");
+        setEditingRow(null);
+        setInlineSmmId("");
+        setInlineSmmQty("");
         setAlertInfo(null);
         setConfirmInfo(null);
         fetchData();
@@ -439,19 +453,27 @@ export default function AdminDashboard() {
                         )}
                       </td>
                       <td style={{textAlign: 'right'}}>
-                        <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
-                          <button 
-                            style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--accent)', border: 'none', color: 'white', cursor: 'pointer'}} 
-                            onClick={() => {
-                              setNewG2gId(g2g);
-                              setNewSmmId(smm === 'NON_SMM' ? 'NON_SMM' : smm);
-                              setNewSmmQty(quantities[g2g] || 1000);
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }}>
-                            Edit
-                          </button>
-                          <button className="danger" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
-                        </div>
+                        {editingRow === g2g ? (
+                          <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                            <input type="text" placeholder="ID SMM" value={inlineSmmId} onChange={e => setInlineSmmId(e.target.value)} style={{padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.8rem'}} />
+                            <input type="number" placeholder="Qty (SMM)" value={inlineSmmQty} onChange={e => setInlineSmmQty(e.target.value)} style={{padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.8rem'}} />
+                            <button style={{padding: '0.4rem', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => initiateAddMapping(null, g2g, inlineSmmId, inlineSmmQty)}>Simpan</button>
+                            <button style={{padding: '0.4rem', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem'}} onClick={() => setEditingRow(null)}>Batal</button>
+                          </div>
+                        ) : (
+                          <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                            <button 
+                              style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--accent)', border: 'none', color: 'white', cursor: 'pointer'}} 
+                              onClick={() => {
+                                setEditingRow(g2g);
+                                setInlineSmmId(smm === 'NON_SMM' ? 'NON_SMM' : smm);
+                                setInlineSmmQty(quantities[g2g] || 1000);
+                              }}>
+                              ✏️ Edit
+                            </button>
+                            <button className="danger" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))
