@@ -54,7 +54,7 @@ async function saveOrderLog(orderData) {
   }
 }
 
-async function deliverG2GOrder(orderId, qty = 1) {
+async function deliverG2GOrder(orderId, deliveryIdFromPayload, qty = 1) {
   const g2gApiKey = process.env.G2G_OPENAPI_KEY;
   const g2gUserId = process.env.G2G_USER_ID;
   const g2gSecretKey = process.env.G2G_SECRET;
@@ -62,13 +62,39 @@ async function deliverG2GOrder(orderId, qty = 1) {
   if (!g2gApiKey || !g2gUserId || !g2gSecretKey) return;
 
   try {
+    let finalDeliveryId = deliveryIdFromPayload;
+    if (!finalDeliveryId) {
+      // Coba dapatkan dari API
+      const getHeaders = generateG2GHeaders(`/v2/orders/${orderId}/delivery`, g2gApiKey, g2gUserId, g2gSecretKey);
+      const getResp = await fetch(`https://open-api.g2g.com/v2/orders/${orderId}/delivery`, { method: 'GET', headers: getHeaders });
+      if (getResp.ok) {
+        const getRespBody = await getResp.json();
+        if (getRespBody && getRespBody.payload && getRespBody.payload.length > 0) {
+           finalDeliveryId = getRespBody.payload[0].delivery_id;
+        } else if (getRespBody && getRespBody.payload && getRespBody.payload.delivery_id) {
+           finalDeliveryId = getRespBody.payload.delivery_id;
+        }
+      }
+    }
+    
+    if (!finalDeliveryId) {
+       console.error("Gagal Auto-Deliver: delivery_id tidak ditemukan");
+       return;
+    }
+
     const postHeaders = generateG2GHeaders(`/v2/orders/${orderId}/delivery`, g2gApiKey, g2gUserId, g2gSecretKey);
     await fetch(`https://open-api.g2g.com/v2/orders/${orderId}/delivery`, {
       method: 'POST',
       headers: postHeaders,
       body: JSON.stringify({
-         "delivered_quantity": qty, 
-         "remarks": "✅ Pesanan Anda telah diterima oleh sistem server kami dan sedang masuk antrean proses. Estimasi masuknya layanan adalah 1 hingga 24 jam. Mohon bersabar dan jangan membuka komplain sebelum 24 jam. Terima kasih!"
+         delivery_id: finalDeliveryId, 
+         codes: [
+            {
+               content: "✅ Pesanan Anda telah diterima dan diproses oleh sistem.",
+               content_type: "text/plain",
+               reference_id: "AUTO-" + Date.now()
+            }
+         ]
       })
     });
   } catch (err) {

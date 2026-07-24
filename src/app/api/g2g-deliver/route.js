@@ -26,19 +26,55 @@ export async function POST(req) {
     }
 
     const body = await req.json();
-    const { orderId, qty } = body;
+    const { orderId, qty, remarks } = body;
 
     if (!orderId || !qty) {
       return NextResponse.json({ error: 'Order ID and Qty are required.' }, { status: 400 });
     }
 
-    const postHeaders = generateG2GHeaders(`/v2/orders/${orderId}/delivery`, g2gApiKey, g2gUserId, g2gSecretKey);
-    const response = await fetch(`https://open-api.g2g.com/v2/orders/${orderId}/delivery`, {
+    // 1. Dapatkan delivery_id terlebih dahulu
+    const getHeaders = generateG2GHeaders(`/v2/orders/${orderId}/delivery`, g2gApiKey, g2gUserId, g2gSecretKey);
+    const getResp = await fetch(`https://open-api.g2g.com/v2/orders/${orderId}/delivery`, {
+      method: 'GET',
+      headers: getHeaders
+    });
+    
+    let deliveryId = '';
+    
+    if (getResp.ok) {
+      const getRespBody = await getResp.json();
+      // Asumsi format array atau object dengan id.
+      // Jika V2 mengembalikan array deliveries:
+      if (getRespBody && getRespBody.payload && getRespBody.payload.length > 0) {
+         deliveryId = getRespBody.payload[0].delivery_id;
+      } else if (getRespBody && getRespBody.payload && getRespBody.payload.delivery_id) {
+         deliveryId = getRespBody.payload.delivery_id;
+      }
+    } else {
+       const errBody = await getResp.text();
+       console.error("Failed to GET delivery info:", errBody);
+       return NextResponse.json({ error: `Gagal mendapatkan delivery_id dari pesanan ini: ${errBody}` }, { status: 400 });
+    }
+    
+    if (!deliveryId) {
+      return NextResponse.json({ error: "delivery_id tidak ditemukan pada pesanan ini. Mungkin pesanan sudah selesai atau belum saatnya dikirim." }, { status: 400 });
+    }
+
+    // 2. Lakukan POST Delivery menggunakan delivery_id dan codes
+    const postPath = `/v2/orders/${orderId}/delivery`;
+    const postHeaders = generateG2GHeaders(postPath, g2gApiKey, g2gUserId, g2gSecretKey);
+    const response = await fetch(`https://open-api.g2g.com${postPath}`, {
       method: 'POST',
       headers: postHeaders,
       body: JSON.stringify({
-         "delivered_quantity": parseInt(qty, 10), 
-         "remarks": "✅ Pesanan Anda telah dikonfirmasi secara manual oleh admin. Terima kasih!"
+        delivery_id: deliveryId,
+        codes: [
+           {
+              content: remarks || "Pesanan telah diproses secara manual dan terkirim.",
+              content_type: "text/plain",
+              reference_id: "MANUAL-" + Date.now()
+           }
+        ]
       })
     });
 
