@@ -3,13 +3,13 @@ import crypto from 'crypto';
 
 function generateG2GHeaders(path, apiKey, userId, secretKey) {
   const timestamp = Date.now().toString();
-  const stringToSign = `${apiKey}${userId}${timestamp}${path}`;
-  const signature = crypto.createHmac('sha256', secretKey).update(stringToSign).digest('hex');
+  const canonicalString = path + apiKey + userId + timestamp;
+  const signature = crypto.createHmac('sha256', secretKey).update(canonicalString).digest('hex');
 
   return {
     'Content-Type': 'application/json',
     'g2g-api-key': apiKey,
-    'g2g-user-id': userId,
+    'g2g-userid': userId,
     'g2g-timestamp': timestamp,
     'g2g-signature': signature
   };
@@ -17,7 +17,7 @@ function generateG2GHeaders(path, apiKey, userId, secretKey) {
 
 export async function POST(req) {
   try {
-    const g2gApiKey = process.env.G2G_API_KEY;
+    const g2gApiKey = process.env.G2G_OPENAPI_KEY;
     const g2gUserId = process.env.G2G_USER_ID;
     const g2gSecretKey = process.env.G2G_SECRET;
 
