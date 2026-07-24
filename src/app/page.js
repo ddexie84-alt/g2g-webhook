@@ -68,12 +68,23 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  // Step 1: Validate
   const initiateAddMapping = async (e) => {
     e.preventDefault();
     if (!newG2gId || !newSmmId || !newSmmQty) return;
     
     setIsAdding(true);
+    
+    if (newSmmId.toUpperCase() === 'NON_SMM') {
+      setConfirmInfo({
+        g2gId: newG2gId,
+        smmId: 'NON_SMM',
+        smmName: 'Layanan Digital / Akun (Tidak Butuh SMM)',
+        smmPrice: '0',
+        smmQty: newSmmQty
+      });
+      setIsAdding(false);
+      return;
+    }
     
     try {
       const servicesRes = await fetch("/api/smm-services");
@@ -296,8 +307,48 @@ export default function AdminDashboard() {
             </button>
           </div>
           
-          <form onSubmit={initiateAddMapping} style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem'}}>
-            <input 
+            </div>
+            <button 
+              onClick={syncG2G} 
+              disabled={isSyncing}
+              style={{ backgroundColor: 'var(--success)', border: 'none', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+            >
+              {isSyncing ? '⏳ Menyinkronkan...' : '🔄 Tarik Data dari G2G'}
+            </button>
+          </div>
+          
+          <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--accent)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--accent)' }}>✏️ Form Tambah / Edit Pemetaan</h3>
+            <form onSubmit={initiateAddMapping} style={{display: 'flex', gap: '0.5rem'}}>
+              <input 
+                type="text" 
+                placeholder="ID Produk G2G" 
+                value={newG2gId}
+                onChange={(e) => setNewG2gId(e.target.value)}
+                style={{flex: 2}}
+                required
+              />
+              <input 
+                type="text" 
+                placeholder="ID SMM" 
+                value={newSmmId}
+                onChange={(e) => setNewSmmId(e.target.value)}
+                style={{flex: 1}}
+                required
+              />
+              <input 
+                type="number" 
+                placeholder="Jmlh (Cth: 1000)" 
+                value={newSmmQty}
+                onChange={(e) => setNewSmmQty(e.target.value)}
+                style={{flex: 1}}
+                required
+              />
+              <button type="submit" disabled={isAdding}>
+                {isAdding ? '⏳...' : 'Simpan'}
+              </button>
+            </form>
+          </div>
               type="text" 
               placeholder="ID G2G" 
               value={newG2gId}
@@ -326,22 +377,91 @@ export default function AdminDashboard() {
             </button>
           </form>
 
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID Produk G2G</th>
-                  <th>Layanan SMM Panel</th>
-                  <th style={{textAlign: 'right'}}>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan="3" className="empty-state">Memuat data...</td></tr>
-                ) : Object.keys(mappings).length === 0 ? (
-                  <tr><td colSpan="3" className="empty-state">Belum ada produk yang dipetakan.</td></tr>
-                ) : (
-                  Object.entries(mappings).map(([g2g, smm]) => (
+          <div style={{ marginBottom: '2rem' }}>
+            <h3 style={{ marginBottom: '1rem', color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#d97706' }}></span>
+              Menunggu Pemetaan (Belum Siap)
+            </h3>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID G2G</th>
+                    <th>Detail SMM</th>
+                    <th style={{textAlign: 'right'}}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan="3" className="empty-state">Memuat data...</td></tr>
+                  ) : Object.keys(mappings).filter(k => mappings[k] === 'BELUM_DIPETAKAN').length === 0 ? (
+                    <tr><td colSpan="3" className="empty-state">Semua produk sudah dipetakan!</td></tr>
+                  ) : (
+                    Object.entries(mappings).filter(([g2g, smm]) => smm === 'BELUM_DIPETAKAN').map(([g2g, smm]) => (
+                      <tr key={g2g} style={{ backgroundColor: '#fffbeb' }}>
+                        <td style={{fontFamily: 'monospace', color: 'var(--accent)', fontSize: '1.1rem'}}>{g2g}</td>
+                        <td>
+                          <span style={{ color: '#d97706', fontWeight: 'bold', fontSize: '0.9rem' }}>⚠️ {smm}</span>
+                          {names[g2g] && (
+                            <div style={{fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem', lineHeight: '1.4'}}>
+                              {names[g2g]}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{textAlign: 'right'}}>
+                          <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                            <button 
+                              style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--primary)', border: 'none', color: 'white', cursor: 'pointer'}} 
+                              onClick={() => {
+                                setNewG2gId(g2g);
+                                setNewSmmId('');
+                                setNewSmmQty(1000);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}>
+                              Set SMM
+                            </button>
+                            <button 
+                              style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--text-muted)', border: 'none', color: 'white', cursor: 'pointer'}} 
+                              onClick={() => {
+                                setNewG2gId(g2g);
+                                setNewSmmId('NON_SMM');
+                                setNewSmmQty(1);
+                                setConfirmInfo({ g2gId: g2g, smmId: 'NON_SMM', smmName: 'Produk Digital / Akun (Tidak Butuh SMM)', smmPrice: '0', smmQty: 1 });
+                              }}>
+                              Abaikan (Non-SMM)
+                            </button>
+                            <button className="danger" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3 style={{ marginBottom: '1rem', color: '#047857', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#047857' }}></span>
+              Siap Pakai (Sudah Dipetakan)
+            </h3>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID G2G</th>
+                    <th>Detail SMM</th>
+                    <th style={{textAlign: 'right'}}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan="3" className="empty-state">Memuat data...</td></tr>
+                  ) : Object.keys(mappings).filter(k => mappings[k] !== 'BELUM_DIPETAKAN').length === 0 ? (
+                    <tr><td colSpan="3" className="empty-state">Belum ada produk yang dipetakan.</td></tr>
+                  ) : (
+                    Object.entries(mappings).filter(([g2g, smm]) => smm !== 'BELUM_DIPETAKAN').map(([g2g, smm]) => (
                     <tr key={g2g}>
                       <td style={{fontFamily: 'monospace', color: 'var(--accent)', fontSize: '1.1rem'}}>{g2g}</td>
                       <td>
@@ -356,7 +476,19 @@ export default function AdminDashboard() {
                         )}
                       </td>
                       <td style={{textAlign: 'right'}}>
-                        <button className="danger" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
+                        <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                          <button 
+                            style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--accent)', border: 'none', color: 'white', cursor: 'pointer'}} 
+                            onClick={() => {
+                              setNewG2gId(g2g);
+                              setNewSmmId(smm === 'NON_SMM' ? 'NON_SMM' : smm);
+                              setNewSmmQty(quantities[g2g] || 1000);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}>
+                            Edit
+                          </button>
+                          <button className="danger" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '6px'}} onClick={() => deleteMapping(g2g)}>Hapus</button>
+                        </div>
                       </td>
                     </tr>
                   ))

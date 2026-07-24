@@ -95,7 +95,11 @@ export async function POST(req) {
       const smmApiKey = process.env.PUSATPANELSMM_API_KEY || 'API_KEY_SMM_ANDA';
       const smmSecretKey = process.env.PUSATPANELSMM_SECRET_KEY || 'SECRET_KEY_SMM_ANDA';
 
-      if (targetLink !== 'LINK_TIDAK_DITEMUKAN') {
+      if (smmServiceId === 'NON_SMM') {
+        smmRawResponse = { message: "✅ NON-SMM: Pesanan ini ditandai sebagai Produk Akun / Digital. Tidak diteruskan ke PusatPanelSMM." };
+        success = true; // Anggap sukses agar log riwayat terlihat hijau
+        // Note: Untuk produk Akun, G2G biasanya mengurus Auto-Delivery via Upload Code.
+      } else if (targetLink !== 'LINK_TIDAK_DITEMUKAN') {
         try {
           const smmResponse = await fetch('https://pusatpanelsmm.com/api/json.php', {
             method: 'POST',
@@ -111,7 +115,7 @@ export async function POST(req) {
           });
 
           const smmResult = await smmResponse.json();
-          smmRawResponse = smmResult; // Save the raw response
+          smmRawResponse = smmResult; 
 
           if (smmResult.status === true || smmResult.data?.id) {
             success = true;
