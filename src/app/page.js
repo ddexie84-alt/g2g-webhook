@@ -31,6 +31,9 @@ export default function AdminDashboard() {
   const [editOfferPrice, setEditOfferPrice] = useState("");
   const [editOfferStock, setEditOfferStock] = useState("");
   const [searchEtalase, setSearchEtalase] = useState("");
+  const [searchPemetaan, setSearchPemetaan] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("Semua");
+  const [updatingOfferId, setUpdatingOfferId] = useState(null);
   
   // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -162,7 +165,7 @@ export default function AdminDashboard() {
   };
 
   const updateOffer = async (offerId, updates) => {
-    setAlertInfo({ type: 'success', title: 'Updating...', message: 'Menghubungi G2G API...' });
+    setUpdatingOfferId(offerId);
     try {
       const res = await fetch('/api/g2g-offers', {
         method: 'PATCH',
@@ -171,14 +174,24 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (data.success) {
-        setAlertInfo(null);
+        setG2gOffers(prev => prev.map(o => {
+          if ((o.offer_id || o.id) === offerId) {
+             return {
+                ...o, 
+                unit_price: updates.price !== undefined ? updates.price : (o.unit_price || o.price),
+                available_qty: updates.stock !== undefined ? updates.stock : (o.available_qty || o.api_qty || o.stock)
+             };
+          }
+          return o;
+        }));
         setEditingOffer(null);
-        fetchG2gOffers();
       } else {
-        setAlertInfo({ type: 'error', title: 'Update Gagal', message: data.error });
+        alert('Gagal update: ' + (data.error || JSON.stringify(data)));
       }
     } catch(e) {
-      setAlertInfo({ type: 'error', title: 'Error', message: e.message });
+      alert('Error updating offer: ' + e.message);
+    } finally {
+      setUpdatingOfferId(null);
     }
   };
 
@@ -367,10 +380,19 @@ export default function AdminDashboard() {
           </div>
           
                     <div style={{ marginBottom: '2rem' }}>
-            <h3 style={{ marginBottom: '1rem', color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#d97706' }}></span>
-              Menunggu Pemetaan (Belum Siap)
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h3 style={{ margin: 0, color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#d97706' }}></span>
+                Menunggu Pemetaan (Belum Siap)
+              </h3>
+              <input 
+                type="text" 
+                placeholder="🔍 Cari ID G2G..." 
+                value={searchPemetaan} 
+                onChange={(e) => setSearchPemetaan(e.target.value)} 
+                style={{ flex: 1, minWidth: '200px', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+              />
+            </div>
             <div className="table-container">
               <table>
                 <thead>
@@ -386,7 +408,7 @@ export default function AdminDashboard() {
                   ) : Object.keys(mappings).filter(k => mappings[k] === 'BELUM_DIPETAKAN').length === 0 ? (
                     <tr><td colSpan="3" className="empty-state">Semua produk sudah dipetakan!</td></tr>
                   ) : (
-                    Object.entries(mappings).filter(([g2g, smm]) => smm === 'BELUM_DIPETAKAN').map(([g2g, smm]) => (
+                    Object.entries(mappings).filter(([g2g, smm]) => smm === 'BELUM_DIPETAKAN' && (!searchPemetaan || g2g.toLowerCase().includes(searchPemetaan.toLowerCase()) || (names[g2g] && names[g2g].toLowerCase().includes(searchPemetaan.toLowerCase())))).map(([g2g, smm]) => (
                       <tr key={g2g}>
                         <td style={{fontFamily: 'monospace', color: 'var(--accent)', fontSize: '1.1rem'}}>{g2g}</td>
                         <td>
@@ -723,6 +745,11 @@ export default function AdminDashboard() {
               </button>
             </div>
           </div>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+            {['Semua', 'Akun', 'Top Up', 'Platform Engagement'].map(cat => (
+              <button key={cat} onClick={() => setCategoryFilter(cat)} style={{ padding: '0.4rem 1rem', borderRadius: '20px', border: categoryFilter === cat ? 'none' : '1px solid var(--border)', backgroundColor: categoryFilter === cat ? 'var(--primary)' : 'transparent', color: categoryFilter === cat ? 'white' : 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }}>{cat}</button>
+            ))}
+          </div>
           {isFetchingOffers && g2gOffers.length === 0 ? <p>Membaca data etalase langsung dari G2G API...</p> : (
             <div className="table-container">
               <table>
@@ -740,9 +767,19 @@ export default function AdminDashboard() {
                   {g2gOffers.length === 0 ? (
                     <tr><td colSpan="6" className="empty-state">Tidak ada penawaran ditemukan</td></tr>
                   ) : g2gOffers.filter(o => {
-                    if (!searchEtalase) return true;
+                    const title = String(o.offer_title || o.title || '').toLowerCase();
                     const q = searchEtalase.toLowerCase();
-                    return String(o.offer_id || o.id || '').toLowerCase().includes(q) || String(o.offer_title || o.title || '').toLowerCase().includes(q);
+                    const matchesSearch = !searchEtalase || String(o.offer_id || o.id || '').toLowerCase().includes(q) || title.includes(q);
+                    if (!matchesSearch) return false;
+                    
+                    if (categoryFilter === 'Akun') {
+                      return title.includes('account') || title.includes('akun') || title.includes('premium') || title.includes('netflix') || title.includes('spotify');
+                    } else if (categoryFilter === 'Top Up') {
+                      return title.includes('top up') || title.includes('subscription') || title.includes('vip') || title.includes('uc') || title.includes('diamond');
+                    } else if (categoryFilter === 'Platform Engagement') {
+                      return title.includes('followers') || title.includes('likes') || title.includes('views') || title.includes('comments') || title.includes('tiktok') || title.includes('youtube') || title.includes('instagram');
+                    }
+                    return true;
                   }).map(o => (
                     <tr key={o.offer_id || o.id}>
                       <td style={{fontFamily: 'monospace', color: 'var(--accent)'}}>{o.offer_id || o.id}</td>
@@ -781,7 +818,9 @@ export default function AdminDashboard() {
                       <td style={{textAlign: 'right'}}>
                         {editingOffer === (o.offer_id || o.id) ? (
                           <div style={{display: 'flex', gap: '4px', justifyContent: 'flex-end'}}>
-                            <button onClick={() => updateOffer(o.offer_id || o.id, { price: editOfferPrice, stock: editOfferStock })} style={{padding: '0.3rem', fontSize: '0.8rem'}}>Simpan</button>
+                            <button onClick={() => updateOffer(o.offer_id || o.id, { price: editOfferPrice, stock: editOfferStock })} disabled={updatingOfferId === (o.offer_id || o.id)} style={{padding: '0.3rem', fontSize: '0.8rem'}}>
+                              {updatingOfferId === (o.offer_id || o.id) ? '⏳ Menyimpan...' : 'Simpan'}
+                            </button>
                             <button onClick={() => setEditingOffer(null)} className="danger" style={{padding: '0.3rem', fontSize: '0.8rem'}}>Batal</button>
                           </div>
                         ) : (
