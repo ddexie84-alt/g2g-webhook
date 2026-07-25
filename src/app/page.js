@@ -1,5 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
+import Sidebar from "../components/Sidebar";
+import KatalogTab from "../components/tabs/KatalogTab";
+import ChatTab from "../components/tabs/ChatTab";
+import FinanceTab from "../components/tabs/FinanceTab";
 
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -86,19 +90,102 @@ export default function AdminDashboard() {
   const [manualForceOrderId, setManualForceOrderId] = useState("");
   const [diagnosticsModalOpen, setDiagnosticsModalOpen] = useState(false);
   const [webhookLogs, setWebhookLogs] = useState([]);
+  const [smmServices, setSmmServices] = useState([]);
   
   // Custom Modal States
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [liveOrderDetail, setLiveOrderDetail] = useState(null);
+  const [isFetchingLiveOrder, setIsFetchingLiveOrder] = useState(false);
   const [alertInfo, setAlertInfo] = useState(null); // { type: 'error' | 'success', title: '', message: '' }
   const [confirmInfo, setConfirmInfo] = useState(null); // { g2gId, smmId, smmName, smmPrice, smmQty }
+  const [orderStatusFilter, setOrderStatusFilter] = useState('ALL'); // ALL, PENDING, COMPLETED, CANCELLED
+  const [storeStatus, setStoreStatus] = useState('Online');
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
+  const fetchLiveOrderDetail = async (orderId) => {
+     setIsFetchingLiveOrder(true);
+     setLiveOrderDetail(null);
+     try {
+       const res = await fetch(`/api/g2g-order-detail?orderId=${orderId}`);
+       const data = await res.json();
+       if (data.success) {
+         setLiveOrderDetail(data.detail);
+       } else {
+         setAlertInfo({ type: 'error', title: 'Gagal', message: data.error || 'Terjadi kesalahan saat mengambil detail pesanan.' });
+       }
+     } catch (e) {
+       setAlertInfo({ type: 'error', title: 'Gagal', message: 'Koneksi terputus.' });
+     }
+     setIsFetchingLiveOrder(false);
+  };
+
+  const toggleStoreStatus = async () => {
+    setIsTogglingStatus(true);
+    const newStatus = storeStatus === 'online' ? 'offline' : 'online';
+    try {
+      const res = await fetch('/api/g2g-store-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStoreStatus(newStatus);
+        setG2gStore(prev => ({...prev, status: newStatus})); // Update UI immediately
+      }
+    } catch(e) {
+      console.error(e);
+    }
+    setIsTogglingStatus(false);
+  };
 
   const fetchG2gOffers = async () => { setIsFetchingOffers(true); try { const res = await fetch('/api/g2g-offers'); const data = await res.json(); if(data.success) setG2gOffers(data.offers); } catch(e){} setIsFetchingOffers(false); };
+  
+  const handleEmergencyZeroStock = async () => {
+    if (!confirm('PERINGATAN BAHAYA: Anda yakin ingin mengenolkan (0) stok SELURUH dagangan Anda? Ini biasanya dilakukan saat server SMM sedang gangguan parah.')) return;
+    setAlertInfo({ type: 'success', title: 'Emergency Mode', message: 'Sedang mengenolkan seluruh stok...' });
+    try {
+      const res = await fetch('/api/g2g-bulk-stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stockValue: 0 })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAlertInfo({ type: 'success', title: 'Berhasil', message: data.message });
+        fetchG2gOffers();
+      } else {
+        setAlertInfo({ type: 'error', title: 'Gagal', message: data.error || JSON.stringify(data) });
+      }
+    } catch(e) {
+      setAlertInfo({ type: 'error', title: 'Error', message: e.message });
+    }
+  };
+
   const fetchSmmServices = async () => { try { const res = await fetch('/api/smm-services'); const data = await res.json(); if(data.success) setSmmServices(data.services); } catch(e){} };
   
+  const [isFetchingWebhookLogs, setIsFetchingWebhookLogs] = useState(false);
+  const fetchWebhookLogs = async () => {
+    setIsFetchingWebhookLogs(true);
+    try {
+      const res = await fetch('/api/g2g-webhook-logs');
+      const data = await res.json();
+      if (data.success) {
+        setWebhookLogs(data.logs || []);
+      }
+    } catch(e) {
+      console.error("Gagal menarik webhook logs", e);
+    }
+    setIsFetchingWebhookLogs(false);
+  };
+
   useEffect(() => { 
     if(activeTab === 'etalase' || activeTab === 'pesanan') {
        if (g2gOffers.length === 0) fetchG2gOffers();
        if (smmServices.length === 0) fetchSmmServices();
+    }
+    if(activeTab === 'keamanan' && webhookLogs.length === 0) {
+       fetchWebhookLogs();
     }
   }, [activeTab]);
   const handleLogin = (e) => {
@@ -358,6 +445,27 @@ export default function AdminDashboard() {
     }
   };
 
+  const cancelOrderG2G = async (orderId) => {
+    if (!confirm(`Batalkan pesanan ${orderId} (Refund) di G2G?`)) return;
+    setAlertInfo({ type: 'success', title: 'Memproses Pembatalan...', message: 'Menghubungi G2G API...' });
+    try {
+      const res = await fetch('/api/g2g-orders-cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, reason: 'Layanan Sedang Gangguan / Kehabisan Stok' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAlertInfo({ type: 'success', title: 'Berhasil Dibatalkan', message: 'Pesanan berhasil dibatalkan.' });
+        fetchData(true);
+      } else {
+        setAlertInfo({ type: 'error', title: 'Gagal', message: data.error || JSON.stringify(data) });
+      }
+    } catch (error) {
+      setAlertInfo({ type: 'error', title: 'Error', message: error.message });
+    }
+  };
+
   const getG2gStatusBadge = (statusOrEvent) => {
     switch(statusOrEvent) {
       case 'unpaid':
@@ -418,40 +526,37 @@ export default function AdminDashboard() {
 
   return (
     <div className="dashboard-layout">
-      {/* Sidebar Navigation */}
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <h1>G2G Auto-Delivery</h1>
-          <p style={{color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem'}}>Sistem Manajemen Toko Otomatis</p>
-        </div>
-        <nav className="nav-menu">
-          <button className={`nav-item ${activeTab === 'pemetaan' ? 'active' : ''}`} onClick={() => setActiveTab('pemetaan')}>
-            🔗 Pemetaan Produk
-          </button>
-          <button className={`nav-item ${activeTab === 'etalase' ? 'active' : ''}`} onClick={() => { setActiveTab('etalase'); fetchG2gOffers(); }}>
-            🛒 Etalase G2G
-          </button>
-          <button className={`nav-item ${activeTab === 'pesanan' ? 'active' : ''}`} onClick={() => setActiveTab('pesanan')}>
-            📈 Pesanan & Analitik
-          </button>
-          <button className={`nav-item ${activeTab === 'katalog' ? 'active' : ''}`} onClick={() => setActiveTab('katalog')}>
-            📚 Katalog G2G (Beta)
-          </button>
-        </nav>
-      </aside>
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} fetchG2gOffers={fetchG2gOffers} />
 
       {/* Main Content Area */}
       <main className="main-content">
         <header className="top-header">
           {/* Store Widget */}
           <div className="widget">
-            <div className="widget-label">Status Toko G2G</div>
+            <div className="widget-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               Status Toko G2G
+               <button 
+                 onClick={toggleStoreStatus} 
+                 disabled={isTogglingStatus}
+                 style={{
+                   padding: '2px 8px', 
+                   fontSize: '0.65rem', 
+                   borderRadius: '12px', 
+                   backgroundColor: storeStatus === 'online' || storeStatus === 'Online' ? 'var(--success)' : 'var(--error)',
+                   color: 'white',
+                   border: 'none',
+                   cursor: 'pointer'
+                 }}
+               >
+                 {isTogglingStatus ? '⏳' : (storeStatus === 'online' || storeStatus === 'Online' ? 'TIDUR / OFFLINE' : 'BANGUN / ONLINE')}
+               </button>
+            </div>
             {g2gStore ? (
               <>
                 <div className="widget-value" style={{color: 'var(--accent)'}}>⭐ {g2gStore.rating || 'N/A'}</div>
                 <div className="widget-sub">
                   🏪 {g2gStore.store_name || g2gStore.name || 'G2G Store'}
-                  {g2gStore.status === 'online' && <span style={{color: 'var(--success)', fontSize: '0.6rem'}}>●</span>}
+                  {(storeStatus === 'online' || storeStatus === 'Online' || g2gStore.status === 'online') && <span style={{color: 'var(--success)', fontSize: '0.6rem', marginLeft: '4px'}}>●</span>}
                 </div>
               </>
             ) : (
@@ -672,6 +777,7 @@ export default function AdminDashboard() {
         {(() => {
            let totalRevenue = 0;
            let totalCost = 0;
+           const dailyData = {};
            
            orders.forEach(orderStr => {
              const order = typeof orderStr === 'string' ? JSON.parse(orderStr) : orderStr;
@@ -699,25 +805,62 @@ export default function AdminDashboard() {
                 
                 totalRevenue += revenue;
                 totalCost += cost;
+
+                const dateObj = new Date(order.timestamp || Date.now());
+                const dateStr = dateObj.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' });
+                if (!dailyData[dateStr]) dailyData[dateStr] = { revenue: 0, profit: 0 };
+                dailyData[dateStr].revenue += revenue;
+                dailyData[dateStr].profit += (revenue - cost);
              }
            });
            
            const totalProfit = totalRevenue - totalCost;
+           
+           // Ambil 7 hari terakhir yang ada datanya
+           const chartLabels = Object.keys(dailyData).slice(0, 7).reverse();
+           const maxMetric = Math.max(...chartLabels.map(l => dailyData[l].revenue), 10);
 
            return (
-             <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', marginBottom: '2rem' }}>
-               <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent)' }}>
-                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Total Pendapatan (G2G)</div>
-                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Rp {totalRevenue.toLocaleString('id-ID')}</div>
+             <div style={{ marginBottom: '2rem' }}>
+               <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', marginBottom: '1rem' }}>
+                 <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent)' }}>
+                   <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Total Pendapatan (G2G)</div>
+                   <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Rp {totalRevenue.toLocaleString('id-ID')}</div>
+                 </div>
+                 <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--error)' }}>
+                   <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Total Pengeluaran (SMM)</div>
+                   <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Rp {totalCost.toLocaleString('id-ID')}</div>
+                 </div>
+                 <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--success)' }}>
+                   <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Keuntungan Bersih (Profit)</div>
+                   <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success)' }}>Rp {totalProfit.toLocaleString('id-ID')}</div>
+                 </div>
                </div>
-               <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--error)' }}>
-                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Total Pengeluaran (SMM)</div>
-                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Rp {totalCost.toLocaleString('id-ID')}</div>
-               </div>
-               <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--success)' }}>
-                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Keuntungan Bersih (Profit)</div>
-                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success)' }}>Rp {totalProfit.toLocaleString('id-ID')}</div>
-               </div>
+
+               {chartLabels.length > 0 && (
+                 <div className="card">
+                   <h3 style={{marginTop: 0, marginBottom: '1.5rem', fontSize: '1.1rem'}}>📈 Tren Penjualan (7 Hari Terakhir)</h3>
+                   <div style={{ display: 'flex', alignItems: 'flex-end', height: '150px', gap: '8px', paddingBottom: '10px', borderBottom: '1px solid var(--border)' }}>
+                     {chartLabels.map(label => {
+                        const revH = (dailyData[label].revenue / maxMetric) * 100;
+                        const profH = (dailyData[label].profit / maxMetric) * 100;
+                        return (
+                          <div key={label} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', height: '100%', group: 'hover' }}>
+                             <div style={{ display: 'flex', alignItems: 'flex-end', height: '100%', gap: '4px', width: '60%' }}>
+                               <div title={`Pendapatan: Rp ${dailyData[label].revenue.toLocaleString('id-ID')}`} style={{ flex: 1, backgroundColor: 'var(--accent)', height: `${revH}%`, borderRadius: '4px 4px 0 0', opacity: 0.8, cursor: 'pointer' }}></div>
+                               <div title={`Profit: Rp ${dailyData[label].profit.toLocaleString('id-ID')}`} style={{ flex: 1, backgroundColor: 'var(--success)', height: `${profH}%`, borderRadius: '4px 4px 0 0', opacity: 0.9, cursor: 'pointer' }}></div>
+                             </div>
+                             <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '8px', whiteSpace: 'nowrap' }}>{label}</div>
+                          </div>
+                        );
+                     })}
+                   </div>
+                   <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'center', fontSize: '0.75rem' }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '12px', height: '12px', backgroundColor: 'var(--accent)', borderRadius: '2px' }}></div> Pendapatan</div>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '12px', height: '12px', backgroundColor: 'var(--success)', borderRadius: '2px' }}></div> Profit Bersih</div>
+                   </div>
+                 </div>
+               )}
              </div>
            );
         })()}
@@ -728,7 +871,7 @@ export default function AdminDashboard() {
             Semua transaksi masuk dicatat di sini. Gunakan tombol "Kirim Manual" jika SMM gagal/tertunda.
           </p>
           
-          <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap'}}>
+           <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap'}}>
              <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center', borderRight: '1px solid var(--border)', paddingRight: '1rem', flex: 1}}>
                  <input 
                    type="text" 
@@ -767,6 +910,25 @@ export default function AdminDashboard() {
                📡 Cek Webhook G2G Gagal
              </button>
           </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+            {['ALL', 'PENDING', 'COMPLETED', 'CANCELLED'].map(filter => (
+               <button 
+                 key={filter} 
+                 onClick={() => setOrderStatusFilter(filter)}
+                 style={{ 
+                   padding: '0.4rem 1rem', 
+                   fontSize: '0.75rem', 
+                   borderRadius: '2rem', 
+                   backgroundColor: orderStatusFilter === filter ? 'var(--accent)' : 'transparent',
+                   border: orderStatusFilter === filter ? 'none' : '1px solid var(--border)',
+                   color: orderStatusFilter === filter ? 'white' : 'var(--text-muted)'
+                 }}
+               >
+                 {filter === 'ALL' ? 'Semua' : filter === 'PENDING' ? 'Menunggu' : filter === 'COMPLETED' ? 'Selesai' : 'Dibatalkan'}
+               </button>
+            ))}
+          </div>
           
           <div className="table-container" style={{maxHeight: '600px', overflowY: 'auto'}}>
             <table>
@@ -785,7 +947,15 @@ export default function AdminDashboard() {
                 ) : orders.length === 0 ? (
                   <tr><td colSpan="5" className="empty-state">Belum ada pesanan masuk.</td></tr>
                 ) : (
-                  orders.map((order, i) => {
+                  orders.filter(orderStr => {
+                    if (orderStatusFilter === 'ALL') return true;
+                    const order = typeof orderStr === 'string' ? JSON.parse(orderStr) : orderStr;
+                    const status = order.rawG2G?.payload?.order_status || order.rawG2G?.event || order.rawG2G?.event_type || order.rawG2G?.type;
+                    if (orderStatusFilter === 'PENDING') return status === 'paid' || status === 'delivering';
+                    if (orderStatusFilter === 'COMPLETED') return status === 'completed' || status === 'delivered' || status === 'order.confirmed' || status === 'order.api_delivery';
+                    if (orderStatusFilter === 'CANCELLED') return status === 'cancelled' || status === 'refunded' || status === 'closed';
+                    return true;
+                  }).map((order, i) => {
                     const parsedOrder = typeof order === 'string' ? JSON.parse(order) : order;
                     return (
                       <tr key={i}>
@@ -825,18 +995,34 @@ export default function AdminDashboard() {
                             >
                               Log
                             </button>
+                            <button 
+                              style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'transparent', border: '1px solid #10b981', color: '#10b981', borderRadius: '4px', cursor: 'pointer'}} 
+                              onClick={() => fetchLiveOrderDetail(parsedOrder.g2gOrderId)}
+                            >
+                              Live
+                            </button>
                             {(() => {
                               const status = parsedOrder.rawG2G?.payload?.order_status || parsedOrder.rawG2G?.event || parsedOrder.rawG2G?.event_type || parsedOrder.rawG2G?.type;
                               const isPaid = status === 'order.api_delivery' || status === 'order.confirmed' || status === 'paid' || status === 'delivering';
                               
                               if (parsedOrder.g2gOrderId && !parsedOrder.g2gOrderId.startsWith('TEST') && isPaid) {
                                 return (
-                                  <button 
-                                    style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'var(--success)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer'}} 
-                                    onClick={() => deliverManualG2G(parsedOrder.g2gOrderId, parsedOrder.purchasedQty || 1)}
-                                  >
-                                    Force
-                                  </button>
+                                  <>
+                                    <button 
+                                      style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'var(--success)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer'}} 
+                                      onClick={() => deliverManualG2G(parsedOrder.g2gOrderId, parsedOrder.purchasedQty || 1)}
+                                      title="Tandai Sukses Terkirim"
+                                    >
+                                      Force
+                                    </button>
+                                    <button 
+                                      style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'var(--error)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer'}} 
+                                      onClick={() => cancelOrderG2G(parsedOrder.g2gOrderId)}
+                                      title="Tolak / Batalkan Pesanan (Refund)"
+                                    >
+                                      Batal
+                                    </button>
+                                  </>
                                 );
                               }
                               return null;
@@ -1029,6 +1215,72 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Live Order Detail Modal */}
+      {(liveOrderDetail || isFetchingLiveOrder) && (
+        <div className="modal-overlay" onClick={() => !isFetchingLiveOrder && setLiveOrderDetail(null)}>
+          <div className="modal" style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+               <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>🔍</span> Detail Pesanan G2G (Live)
+               </h2>
+               <button className="danger" onClick={() => setLiveOrderDetail(null)}>Tutup</button>
+            </div>
+            
+            {isFetchingLiveOrder ? (
+               <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  ⏳ Sedang mengambil data langsung dari server G2G...
+               </div>
+            ) : liveOrderDetail ? (
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                   <div style={{ flex: '1', minWidth: '200px', backgroundColor: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
+                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Order ID</div>
+                     <div style={{ fontWeight: 'bold', fontFamily: 'monospace' }}>{liveOrderDetail.order_id}</div>
+                   </div>
+                   <div style={{ flex: '1', minWidth: '200px', backgroundColor: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
+                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status Pesanan</div>
+                     <div style={{ fontWeight: 'bold', color: 'var(--accent)' }}>{liveOrderDetail.status}</div>
+                   </div>
+                   <div style={{ flex: '1', minWidth: '200px', backgroundColor: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
+                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Mata Uang & Harga</div>
+                     <div style={{ fontWeight: 'bold', color: 'var(--success)' }}>{liveOrderDetail.currency} {liveOrderDetail.amount}</div>
+                   </div>
+                 </div>
+
+                 <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                   <h3 style={{ fontSize: '1rem', marginBottom: '1rem' }}>📦 Pengiriman (Delivery List)</h3>
+                   {Array.isArray(liveOrderDetail.delivery_list) && liveOrderDetail.delivery_list.map((dl, i) => (
+                     <div key={i} style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '4px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.9rem' }}>
+                           <div><strong>Offer ID:</strong> <span style={{fontFamily: 'monospace'}}>{dl.offer_id}</span></div>
+                           <div><strong>Purchased Qty:</strong> {dl.purchased_qty}</div>
+                           <div><strong>Delivered Qty:</strong> {dl.delivered_qty}</div>
+                           <div><strong>Undelivered Qty:</strong> {dl.undelivered_qty}</div>
+                           {dl.delivery_summary && (
+                             <>
+                               <div><strong>Delivery ID:</strong> <span style={{fontFamily: 'monospace'}}>{dl.delivery_summary.delivery_id}</span></div>
+                               <div><strong>Delivery Mode:</strong> {dl.delivery_summary.delivery_mode}</div>
+                               <div><strong>Delivery Method:</strong> {dl.delivery_summary.delivery_method_code}</div>
+                               <div><strong>Delivery Status:</strong> <span style={{color: 'var(--accent)'}}>{dl.delivery_summary.delivery_status}</span></div>
+                             </>
+                           )}
+                        </div>
+                     </div>
+                   ))}
+                 </div>
+                 
+                 <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                   <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>📄 Raw JSON Data</h3>
+                   <pre style={{ fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                     {JSON.stringify(liveOrderDetail, null, 2)}
+                   </pre>
+                 </div>
+               </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
       {activeTab === 'etalase' && (
         <div className="card">
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem'}}>
@@ -1045,6 +1297,9 @@ export default function AdminDashboard() {
                  />
                  <button onClick={handleBulkSync} disabled={isBulkSyncing || !marginPercentage} style={{padding: '0.4rem 0.8rem', backgroundColor: 'var(--accent)', border: 'none', color: 'white', borderRadius: '4px'}}>
                     {isBulkSyncing ? '⏳ Sync...' : '⚡ Sync Massal'}
+                 </button>
+                 <button onClick={handleEmergencyZeroStock} style={{padding: '0.4rem 0.8rem', backgroundColor: 'var(--error)', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer'}} title="Nolkan seluruh stok jika sistem SMM mati total">
+                    🚨 Panik (Stok 0)
                  </button>
               </div>
               <input 
@@ -1136,8 +1391,8 @@ export default function AdminDashboard() {
                           </div>
                         ) : (
                           <div style={{display: 'flex', gap: '4px', justifyContent: 'flex-end'}}>
-                            <button onClick={() => updateOffer(o.offer_id || o.id, { status: isActive ? 'offline' : 'live' })} disabled={updatingOfferId === (o.offer_id || o.id)} style={{padding: '0.3rem', fontSize: '0.8rem', backgroundColor: isActive ? '#f59e0b' : '#10b981', color: 'white', border: 'none'}}>
-                              {updatingOfferId === (o.offer_id || o.id) ? '...' : (isActive ? 'Matikan' : 'Hidupkan')}
+                            <button onClick={() => updateOffer(o.offer_id || o.id, { status: isActive ? 0 : 1 })} disabled={updatingOfferId === (o.offer_id || o.id)} style={{padding: '0.3rem', fontSize: '0.8rem', backgroundColor: isActive ? '#f59e0b' : '#10b981', color: 'white', border: 'none'}}>
+                              {updatingOfferId === (o.offer_id || o.id) ? '...' : (isActive ? '⏸️ Pause' : '▶️ Play')}
                             </button>
                             <button onClick={() => { setEditingOffer(o.offer_id || o.id); setEditOfferPrice(o.unit_price || o.price); setEditOfferStock(o.available_qty || o.api_qty || o.stock || 0); }} style={{padding: '0.3rem', fontSize: '0.8rem'}}>Ubah</button>
                           </div>
@@ -1154,41 +1409,65 @@ export default function AdminDashboard() {
       )}
 
       {activeTab === 'katalog' && (
+        <KatalogTab g2gProducts={g2gProducts} isFetchingProducts={isFetchingProducts} fetchG2gProducts={fetchG2gProducts} />
+      )}
+
+      {activeTab === 'chat' && (
+        <ChatTab />
+      )}
+
+      {activeTab === 'finance' && (
+        <FinanceTab />
+      )}
+
+      {activeTab === 'keamanan' && (
         <div className="card">
-          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
-            <h2 style={{margin: 0}}>📚 Katalog Resmi G2G</h2>
-            <button onClick={fetchG2gProducts} disabled={isFetchingProducts} className="secondary">
-              {isFetchingProducts ? '⏳ Menarik Data...' : '🔄 Refresh Katalog'}
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem'}}>
+            <div>
+              <h2 style={{margin: 0}}>🛡️ Log Audit & Keamanan Webhook</h2>
+              <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem'}}>
+                Troubleshooting otomatis. Menampilkan log notifikasi yang <b>gagal</b> terkirim dari G2G ke Vercel Anda.
+              </p>
+            </div>
+            <button onClick={fetchWebhookLogs} disabled={isFetchingWebhookLogs} className="secondary">
+              {isFetchingWebhookLogs ? '⏳ Memeriksa...' : '🔄 Periksa Ulang'}
             </button>
           </div>
-          <p style={{color: 'var(--text-muted)', marginBottom: '1.5rem'}}>
-            Gunakan katalog ini untuk melakukan riset game atau layanan yang paling banyak tersedia di G2G sebelum Anda memutuskan untuk memetakannya ke SMM Panel.
-          </p>
           
-          {isFetchingProducts ? (
-            <div className="empty-state">Menarik data dari API G2G...</div>
-          ) : g2gProducts.length === 0 ? (
-            <div className="empty-state">Katalog Kosong. Tekan Refresh.</div>
-          ) : (
-            <div className="metrics-grid">
-              {g2gProducts.map(p => (
-                <div key={p.id} className="metric-card" style={{borderLeft: '4px solid var(--accent)'}}>
-                  <div style={{fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                    {p.name}
-                    {p.status === 1 && <span className="badge success">Aktif</span>}
-                  </div>
-                  <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace'}}>
-                    ID: {p.id}
-                  </div>
-                  {p.description && (
-                     <div style={{fontSize: '0.85rem', marginTop: '0.5rem', color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>
-                        {p.description}
-                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tanggal (UTC)</th>
+                  <th>Order ID</th>
+                  <th>Tipe Event</th>
+                  <th>Status</th>
+                  <th>Detail Kegagalan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isFetchingWebhookLogs ? (
+                  <tr><td colSpan="5" className="empty-state">Menganalisis keamanan API...</td></tr>
+                ) : webhookLogs.length === 0 ? (
+                  <tr><td colSpan="5" className="empty-state">🎉 Server sangat sehat! Tidak ada Webhook yang gagal atau hilang dalam 7 hari terakhir.</td></tr>
+                ) : (
+                  webhookLogs.map((log, index) => (
+                    <tr key={log.id || index} style={{ backgroundColor: 'rgba(185, 28, 28, 0.05)' }}>
+                      <td style={{fontFamily: 'monospace'}}>{log.created_at || log.timestamp || 'N/A'}</td>
+                      <td>{log.order_id || log.payload?.order_id || 'N/A'}</td>
+                      <td>
+                        <span className="badge warning">{log.event || log.type || 'Unknown'}</span>
+                      </td>
+                      <td><span className="badge danger">GAGAL</span></td>
+                      <td style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>
+                        {log.response_error || log.error || 'Timeout / Server Down'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

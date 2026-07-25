@@ -42,6 +42,7 @@ export async function POST(req) {
     let deliveryId = '';
     let debugInfo = '';
     let isDirectTopUp = false;
+    let deliveryInfoToSubmit = [];
     
     if (getResp.ok) {
       const getRespBody = await getResp.json();
@@ -52,8 +53,21 @@ export async function POST(req) {
          const firstDelivery = getRespBody.payload.delivery_list[0];
          if (firstDelivery.delivery_summary && firstDelivery.delivery_summary.delivery_id) {
              deliveryId = firstDelivery.delivery_summary.delivery_id;
-             if (firstDelivery.delivery_summary.delivery_method_code === "direct_top_up") {
-                 isDirectTopUp = true;
+             if (firstDelivery.delivery_summary.delivery_method_code === "direct_top_up" || firstDelivery.delivery_summary.delivery_mode === "normal") {
+                 // G2G recommends PATCH for direct top up and some normal deliveries
+                 isDirectTopUp = true; 
+             }
+             
+             // Extract required delivery_info from delivery_method_list if present
+             if (Array.isArray(firstDelivery.delivery_summary.delivery_method_list)) {
+                firstDelivery.delivery_summary.delivery_method_list.forEach(method => {
+                   if (method.attribute_key) {
+                      deliveryInfoToSubmit.push({
+                         attribute_key: method.attribute_key,
+                         value: "Done / Completed"
+                      });
+                   }
+                });
              }
          }
       } else if (getRespBody && getRespBody.payload && getRespBody.payload.delivery_id) {
@@ -73,19 +87,25 @@ export async function POST(req) {
     let response;
     
     if (isDirectTopUp) {
-       // Untuk Top Up, gunakan PATCH ke endpoint delivery_id
+       // Untuk Top Up / Normal, gunakan PATCH ke endpoint delivery_id
        const patchPath = `/v2/orders/${orderId}/delivery/${deliveryId}`;
        const patchHeaders = generateG2GHeaders(patchPath, g2gApiKey, g2gUserId, g2gSecretKey);
+       
+       const payload = {
+          delivered_qty: parseInt(qty, 10) || 1,
+          delivered_at: Date.now()
+       };
+       if (deliveryInfoToSubmit.length > 0) {
+          payload.delivery_info = deliveryInfoToSubmit;
+       }
+       
        response = await fetch(`https://open-api.g2g.com${patchPath}`, {
          method: 'PATCH',
          headers: patchHeaders,
-         body: JSON.stringify({
-            delivered_qty: parseInt(qty, 10),
-            delivered_at: Date.now()
-         })
+         body: JSON.stringify(payload)
        });
     } else {
-       // 2. Lakukan POST Delivery menggunakan delivery_id dan codes
+       // Lakukan POST Delivery menggunakan delivery_id dan codes
        const postPath = `/v2/orders/${orderId}/delivery`;
        const postHeaders = generateG2GHeaders(postPath, g2gApiKey, g2gUserId, g2gSecretKey);
        response = await fetch(`https://open-api.g2g.com${postPath}`, {

@@ -75,8 +75,8 @@ export async function PATCH(req) {
     const payload = {};
     if (price !== undefined) payload.unit_price = Number(price);
     if (stock !== undefined) payload.api_qty = Number(stock);
-    if (active !== undefined) payload.offer_status = active ? 'live' : 'offline';
-    if (status !== undefined) payload.status = status; // allow explicit status string like 'live', 'offline', 'inactive'
+    if (status !== undefined) payload.status = parseInt(status, 10);
+    // G2G V2 uses status 1 for Active, 0 for Inactive
 
     const path = `/v2/offers/${offerId}`;
     const patchHeaders = generateG2GHeaders(path, g2gApiKey, g2gUserId, g2gSecretKey);
