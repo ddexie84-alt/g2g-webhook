@@ -1,93 +1,129 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 
 export default function FinanceTab() {
-  const [financeData, setFinanceData] = useState(null);
+  const [financeData, setFinanceData] = useState({ balance: 0, pending: 0, payouts: [] });
   const [loading, setLoading] = useState(true);
 
   const fetchFinance = async () => {
-    setLoading(true);
     try {
-      const res = await fetch('/api/g2g-finance');
+      const res = await fetch("/api/orders");
       const data = await res.json();
-      if (data.success) {
-        setFinanceData(data.finance);
+      
+      let totalRevenue = 0;
+      let totalProfit = 0;
+      let pendingClearance = 0;
+      let recentOrders = [];
+      
+      if (data.orders && Array.isArray(data.orders)) {
+        data.orders.forEach(orderStr => {
+          let order; 
+          try { order = typeof orderStr === 'string' ? JSON.parse(orderStr) : orderStr; } catch(e) { return; } 
+          if (!order) return;
+          
+          const status = order.rawG2G?.payload?.order_status || order.rawG2G?.event || order.rawG2G?.event_type || order.rawG2G?.type;
+          
+          let g2gPrice = order.rawG2G?.payload?.unit_price || 0;
+          const rev = parseFloat(g2gPrice) * (parseInt(order.quantity) || 1);
+          const cost = parseFloat(order.smmCost || 0);
+          
+          // Consider "completed" or "delivered" as contributing to pending clearance
+          // Consider "paid" or "delivering" as just gross revenue
+          const isPaid = status === 'order.api_delivery' || status === 'order.confirmed' || status === 'paid' || status === 'delivering' || status === 'delivered';
+          const isCompleted = status === 'order.completed' || status === 'delivered';
+          
+          if (isPaid) {
+            totalRevenue += rev;
+            totalProfit += (rev - cost);
+            if (!isCompleted) {
+              pendingClearance += rev;
+            }
+            
+            recentOrders.push({
+              date: order.timestamp ? new Date(order.timestamp).toISOString() : new Date().toISOString(),
+              amount: rev.toFixed(2),
+              status: isCompleted ? "Completed" : "Pending"
+            });
+          }
+        });
       }
-    } catch (error) {
-      console.error("Failed to fetch finance");
+      
+      recentOrders.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      setFinanceData({
+        balance: totalRevenue.toFixed(2),
+        profit: totalProfit.toFixed(2),
+        pending: pendingClearance.toFixed(2),
+        payouts: recentOrders.slice(0, 10) // Show last 10 contributing orders instead of "payouts"
+      });
+      
+    } catch (e) {
+      console.error(e);
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     fetchFinance();
   }, []);
 
   if (loading) {
-    return <div className="card empty-state">⏳ Sedang menghubungi Bank G2G...</div>;
-  }
-
-  if (!financeData) {
-    return <div className="card empty-state">Gagal memuat data keuangan.</div>;
+    return <div className="card"><div className="empty-state">Menghitung Estimasi Keuangan Lokal...</div></div>;
   }
 
   return (
-    <div className="card" style={{ animation: 'fadeIn 0.4s ease' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h2>💰 Dompet & Keuangan (G2G Wallet)</h2>
-        <button onClick={fetchFinance} className="secondary">🔄 Segarkan Saldo</button>
-      </div>
-
-      <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-        {/* Main Balance Card */}
-        <div style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(192, 132, 252, 0.1))', padding: '2rem', borderRadius: '1rem', border: '1px solid rgba(99, 102, 241, 0.3)', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Total Saldo Tersedia</div>
-          <div style={{ fontSize: '2.5rem', fontWeight: 'bold', fontFamily: 'Outfit', color: 'white' }}>
-             <span style={{ fontSize: '1.5rem', marginRight: '0.5rem', color: 'var(--accent)' }}>{financeData.currency || 'USD'}</span>
-             {financeData.balance || '0.00'}
+    <div style={{display: 'flex', flexDirection: 'column', gap: '2rem'}}>
+      <div className="card" style={{background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(168, 85, 247, 0.05))'}}>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem'}}>
+          <div>
+            <h2 style={{margin: 0, color: 'var(--accent)'}}>💳 Estimasi Keuangan (Lokal)</h2>
+            <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem'}}>
+              Data ini dihitung berdasarkan transaksi yang masuk ke webhook. G2G API tidak membuka akses untuk dompet asli.
+            </p>
           </div>
-          <div style={{ position: 'absolute', right: '-20px', bottom: '-20px', fontSize: '8rem', opacity: 0.1, transform: 'rotate(-15deg)' }}>💳</div>
+          <button onClick={() => { setLoading(true); fetchFinance(); }} className="secondary">🔄 Hitung Ulang</button>
         </div>
 
-        {/* Pending Clearance Card */}
-        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '2rem', borderRadius: '1rem', border: '1px solid var(--border)' }}>
-          <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Menunggu Pencairan (Pending)</div>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold', fontFamily: 'Outfit', color: 'var(--warning)' }}>
-             <span style={{ fontSize: '1.2rem', marginRight: '0.5rem' }}>{financeData.currency || 'USD'}</span>
-             {financeData.pending_clearance || '0.00'}
+        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem'}}>
+          <div style={{padding: '1.5rem', backgroundColor: 'var(--bg-lighter)', borderRadius: '12px', border: '1px solid var(--border)'}}>
+            <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0'}}>Estimasi Pendapatan Kotor</p>
+            <h3 style={{margin: 0, fontSize: '1.75rem', color: 'white'}}>USD {financeData.balance}</h3>
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-            Akan masuk ke saldo tersedia setelah masa garansi G2G selesai.
+          <div style={{padding: '1.5rem', backgroundColor: 'var(--bg-lighter)', borderRadius: '12px', border: '1px solid var(--border)'}}>
+            <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0'}}>Belum Cair (Pending)</p>
+            <h3 style={{margin: 0, fontSize: '1.75rem', color: 'var(--warning)'}}>USD {financeData.pending}</h3>
+          </div>
+          <div style={{padding: '1.5rem', backgroundColor: 'var(--bg-lighter)', borderRadius: '12px', border: '1px solid var(--border)'}}>
+            <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 0 0.5rem 0'}}>Estimasi Laba Bersih</p>
+            <h3 style={{margin: 0, fontSize: '1.75rem', color: 'var(--success)'}}>USD {financeData.profit}</h3>
           </div>
         </div>
-      </div>
 
-      <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>Riwayat Penarikan (Recent Payouts)</h3>
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Tanggal</th>
-              <th>Jumlah</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(!financeData.recent_payouts || financeData.recent_payouts.length === 0) ? (
-              <tr><td colSpan="3" className="empty-state">Belum ada riwayat penarikan.</td></tr>
-            ) : (
-              financeData.recent_payouts.map((payout, i) => (
-                <tr key={i}>
-                  <td style={{ color: 'var(--text-muted)' }}>{new Date(payout.date).toLocaleString('id-ID')}</td>
-                  <td style={{ fontWeight: 'bold', fontFamily: 'monospace', fontSize: '1.1rem' }}>{financeData.currency} {payout.amount}</td>
-                  <td>
-                    <span className="badge success">{payout.status}</span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        <h3 style={{marginBottom: '1rem'}}>Riwayat Kontribusi Transaksi</h3>
+        <div className="table-container" style={{maxHeight: '300px', overflowY: 'auto'}}>
+          <table>
+            <thead>
+              <tr>
+                <th>Tanggal Transaksi</th>
+                <th>Nilai (USD)</th>
+                <th>Status (Lokal)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(!Array.isArray(financeData.payouts) || financeData.payouts.length === 0) ? (
+                <tr><td colSpan="3" className="empty-state">Belum ada data pendapatan.</td></tr>
+              ) : (
+                financeData.payouts.map((p, i) => (
+                  <tr key={i}>
+                    <td>{new Date(p.date).toLocaleString('id-ID')}</td>
+                    <td style={{fontFamily: 'monospace', color: 'var(--success)'}}>+ {p.amount}</td>
+                    <td><span className={`badge ${p.status === 'Completed' ? 'success' : 'warning'}`}>{p.status}</span></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

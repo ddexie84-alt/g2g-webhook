@@ -1,226 +1,150 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 
 export default function ChatTab() {
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [replyText, setReplyText] = useState('');
-  const [selectedConversation, setSelectedConversation] = useState(null);
-
-  // Default Quick Reply Templates
-  const [quickReplies, setQuickReplies] = useState([
-    { id: 1, title: 'Ready Stock', text: 'Hello! Yes, the stock is ready and delivery is instant. Please place your order! 🚀' },
-    { id: 2, title: 'Processing', text: 'Hello! I have received your order. Please wait a few minutes while I process it. ⏳' },
-    { id: 3, title: 'Done / Thanks', text: 'Your order has been delivered! Please confirm the delivery and leave a good review. Thank you! ⭐' },
-    { id: 4, title: 'AFK / Sleep', text: 'Hello! Im currently away or sleeping. I will process your order as soon as I wake up. 💤' }
-  ]);
-  const [newTemplateTitle, setNewTemplateTitle] = useState('');
+  const [templates, setTemplates] = useState([]);
+  const [newTemplateName, setNewTemplateName] = useState('');
   const [newTemplateText, setNewTemplateText] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editText, setEditText] = useState('');
+  const [copiedId, setCopiedId] = useState(null);
 
-  const fetchChats = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/g2g-chat');
-      const data = await res.json();
-      if (data.success) {
-        setMessages(data.chats || []);
-      }
-    } catch (error) {
-      console.error("Failed to fetch chats");
-    }
-    setLoading(false);
-  };
-
+  // Load from local storage on mount
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchChats();
+    const saved = localStorage.getItem('g2g_chat_templates');
+    if (saved) {
+      try {
+        setTemplates(JSON.parse(saved));
+      } catch(e) {
+        setTemplates(defaultTemplates);
+      }
+    } else {
+      setTemplates(defaultTemplates);
+    }
   }, []);
 
+  const defaultTemplates = [
+    { id: 't1', name: 'Greeting', text: 'Hello! Thanks for your order. We are processing it now.' },
+    { id: 't2', name: 'Delivery Info', text: 'Your order has been delivered. Please check and confirm!' },
+    { id: 't3', name: 'Review Request', text: 'Thank you for your purchase! If you are satisfied, please leave a 5-star review.' },
+    { id: 't4', name: 'Apology (Delay)', text: 'We apologize for the delay. Your order will be processed shortly.' }
+  ];
 
-  const sendReply = async (textToSend, e = null) => {
-    if (e) e.preventDefault();
-    if (!textToSend.trim() || !selectedConversation) return;
-
-    try {
-       const res = await fetch('/api/g2g-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-             conversation_id: selectedConversation.id,
-             message: textToSend
-          })
-       });
-       const data = await res.json();
-       
-       if (data.success) {
-          // Update local state to show the sent message immediately
-          setMessages(prev => prev.map(chat => 
-             chat.id === selectedConversation.id 
-               ? { ...chat, last_message: textToSend } 
-               : chat
-          ));
-          setSelectedConversation(prev => ({ ...prev, last_message: textToSend }));
-          setReplyText('');
-       } else {
-          alert('Gagal mengirim pesan: ' + data.error);
-       }
-    } catch (err) {
-       alert('Gagal mengirim pesan. Cek koneksi.');
-    }
+  const saveToStorage = (newTemplates) => {
+    setTemplates(newTemplates);
+    localStorage.setItem('g2g_chat_templates', JSON.stringify(newTemplates));
   };
 
-  const addTemplate = (e) => {
+  const handleAdd = (e) => {
     e.preventDefault();
-    if (!newTemplateTitle.trim() || !newTemplateText.trim()) return;
-    setQuickReplies([...quickReplies, { 
-      id: Date.now(), 
-      title: newTemplateTitle, 
-      text: newTemplateText 
-    }]);
-    setNewTemplateTitle('');
+    if (!newTemplateName.trim() || !newTemplateText.trim()) return;
+    const newT = { id: Date.now().toString(), name: newTemplateName, text: newTemplateText };
+    saveToStorage([...templates, newT]);
+    setNewTemplateName('');
     setNewTemplateText('');
   };
 
-  const deleteTemplate = (id) => {
-    setQuickReplies(quickReplies.filter(qr => qr.id !== id));
+  const handleDelete = (id) => {
+    if (confirm("Hapus template ini?")) {
+      saveToStorage(templates.filter(t => t.id !== id));
+    }
+  };
+
+  const handleEdit = (t) => {
+    setEditingId(t.id);
+    setEditName(t.name);
+    setEditText(t.text);
+  };
+
+  const handleSaveEdit = () => {
+    saveToStorage(templates.map(t => t.id === editingId ? { ...t, name: editName, text: editText } : t));
+    setEditingId(null);
+  };
+
+  const handleCopy = (text, id) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem'}}>
         <div>
-          <h2 style={{margin: 0}}>💬 Pesan & Auto-Reply Bot</h2>
+          <h2 style={{margin: 0}}>💬 Clipboard Template Chat</h2>
           <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem'}}>
-            Pusat layanan pelanggan. Gunakan Quick Reply untuk membalas pembeli dalam hitungan detik.
+            API G2G belum mendukung fitur Chat Otomatis. Gunakan halaman ini sebagai wadah penyimpanan template pesan yang bisa Anda <b>Copy</b> secara cepat saat melayani pembeli di Web G2G.
           </p>
         </div>
-        <button onClick={fetchChats} disabled={loading} className="secondary">
-          {loading ? '⏳ Memuat...' : '🔄 Segarkan'}
-        </button>
       </div>
-      
-      <div style={{ display: 'flex', gap: '1.5rem', height: '650px' }}>
-        {/* Chat List (Left Column) */}
-        <div style={{ width: '300px', borderRight: '1px solid var(--border)', overflowY: 'auto', paddingRight: '1rem' }}>
-           <h3 style={{fontSize: '1rem', marginBottom: '1rem'}}>Inbox</h3>
-           {(!Array.isArray(messages) || messages.length === 0) ? (
-             <div className="empty-state" style={{ padding: '2rem 1rem' }}>
-               Belum ada pesan masuk hari ini.
-             </div>
-           ) : (
-             (Array.isArray(messages) ? messages : []).map((chat, idx) => (
-               <div 
-                 key={idx} 
-                 onClick={() => setSelectedConversation(chat)}
-                 style={{ 
-                   padding: '1rem', 
-                   borderBottom: '1px solid rgba(255,255,255,0.05)', 
-                   cursor: 'pointer',
-                   backgroundColor: selectedConversation?.id === chat.id ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
-                   borderRadius: '8px',
-                   marginBottom: '0.5rem',
-                   borderLeft: selectedConversation?.id === chat.id ? '3px solid var(--accent)' : '3px solid transparent'
-                 }}
-               >
-                 <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>{chat.sender_name || 'Pembeli'}</div>
-                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                   {chat.last_message || 'Pesan terenkripsi...'}
-                 </div>
-               </div>
-             ))
-           )}
+
+      <div className="grid">
+        <div className="card" style={{backgroundColor: 'var(--bg-lighter)', border: '1px dashed var(--border)'}}>
+          <h3 style={{marginTop: 0}}>➕ Tambah Template Baru</h3>
+          <form onSubmit={handleAdd} style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
+            <input 
+              type="text" 
+              placeholder="Judul Template (Cth: Balasan Keterlambatan)" 
+              value={newTemplateName} 
+              onChange={e => setNewTemplateName(e.target.value)} 
+              required
+            />
+            <textarea 
+              placeholder="Teks Pesan..." 
+              value={newTemplateText} 
+              onChange={e => setNewTemplateText(e.target.value)} 
+              rows="3" 
+              style={{resize: 'vertical', minHeight: '80px'}}
+              required
+            ></textarea>
+            <button type="submit" className="primary">Simpan Template</button>
+          </form>
         </div>
 
-        {/* Chat Area (Center Column) */}
-        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', paddingRight: '1rem' }}>
-           {selectedConversation ? (
-             <>
-               <div style={{ padding: '1rem', borderBottom: '1px solid var(--border)', fontWeight: 'bold' }}>
-                 Percakapan dengan <span style={{color: 'var(--accent)'}}>{selectedConversation.sender_name}</span>
-               </div>
-               <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                 <div style={{ alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.05)', padding: '0.75rem 1rem', borderRadius: '1rem', borderBottomLeftRadius: 0, maxWidth: '85%', lineHeight: '1.5' }}>
-                   {selectedConversation.last_message}
-                 </div>
-               </div>
-               <form onSubmit={(e) => sendReply(replyText, e)} style={{ padding: '1rem', borderTop: '1px solid var(--border)', display: 'flex', gap: '0.5rem' }}>
-                 <input 
-                   type="text" 
-                   value={replyText}
-                   onChange={e => setReplyText(e.target.value)}
-                   placeholder="Tulis balasan manual..." 
-                   style={{ flex: 1 }}
-                 />
-                 <button type="submit" style={{width: '100px'}}>Kirim</button>
-               </form>
-             </>
-           ) : (
-             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-               Pilih percakapan di sebelah kiri untuk melihat detail.
-             </div>
-           )}
-        </div>
-        
-        {/* Quick Reply Area (Right Column) */}
-        <div style={{ width: '350px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-           <div>
-             <h3 style={{fontSize: '1rem', marginBottom: '1rem', color: 'var(--success)'}}>⚡ Quick Reply (Balas Cepat)</h3>
-             <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem'}}>
-               Klik tombol <b>Kirim ⚡</b> pada template di bawah ini untuk merespons <i>customer</i> secara instan tanpa perlu mengetik panjang.
-             </p>
-             
-             {quickReplies.map((qr) => (
-               <div key={qr.id} style={{
-                 backgroundColor: 'rgba(16, 185, 129, 0.05)', 
-                 border: '1px solid rgba(16, 185, 129, 0.2)', 
-                 padding: '1rem', 
-                 borderRadius: '8px', 
-                 marginBottom: '0.75rem',
-                 position: 'relative'
-               }}>
-                 <div style={{fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--success)', marginBottom: '0.25rem'}}>{qr.title}</div>
-                 <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem'}}>{qr.text}</div>
-                 <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'space-between'}}>
+        <div style={{display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '500px', overflowY: 'auto'}}>
+          {templates.length === 0 ? (
+            <div className="empty-state">Belum ada template tersimpan.</div>
+          ) : (
+            templates.map(t => (
+              <div key={t.id} className="card" style={{padding: '1rem', position: 'relative', borderLeft: '4px solid var(--accent)'}}>
+                {editingId === t.id ? (
+                  <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem'}}>
+                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)} />
+                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows="3" />
+                    <div style={{display: 'flex', gap: '0.5rem', marginTop: '0.5rem'}}>
+                      <button onClick={handleSaveEdit} className="success" style={{flex: 1}}>Simpan</button>
+                      <button onClick={() => setEditingId(null)} className="secondary" style={{flex: 1}}>Batal</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem'}}>
+                      <h4 style={{margin: 0, color: 'var(--accent)'}}>{t.name}</h4>
+                      <div style={{display: 'flex', gap: '4px'}}>
+                        <button onClick={() => handleEdit(t)} className="secondary" style={{padding: '0.2rem 0.5rem', fontSize: '0.75rem'}}>Edit</button>
+                        <button onClick={() => handleDelete(t.id)} className="danger" style={{padding: '0.2rem 0.5rem', fontSize: '0.75rem'}}>Hapus</button>
+                      </div>
+                    </div>
+                    <div style={{backgroundColor: 'var(--bg-dark)', padding: '0.75rem', borderRadius: '4px', fontSize: '0.9rem', color: 'var(--text-light)', marginBottom: '1rem', whiteSpace: 'pre-wrap'}}>
+                      {t.text}
+                    </div>
                     <button 
-                      onClick={() => sendReply(qr.text)} 
-                      disabled={!selectedConversation}
+                      onClick={() => handleCopy(t.text, t.id)} 
                       style={{
-                        padding: '0.4rem 1rem', 
-                        fontSize: '0.8rem', 
-                        backgroundColor: selectedConversation ? 'var(--success)' : '#4b5563',
-                        color: 'white',
-                        border: 'none',
-                        flex: 1
+                        width: '100%', 
+                        backgroundColor: copiedId === t.id ? 'var(--success)' : 'var(--bg-lighter)',
+                        border: copiedId === t.id ? 'none' : '1px solid var(--border)',
+                        color: copiedId === t.id ? 'white' : 'var(--text-light)'
                       }}
                     >
-                      {selectedConversation ? '🚀 Kirim Cepat' : 'Pilih Chat Dulu'}
+                      {copiedId === t.id ? '✅ Tersalin!' : '📋 Copy Teks'}
                     </button>
-                    <button onClick={() => deleteTemplate(qr.id)} className="danger" style={{padding: '0.4rem', fontSize: '0.8rem'}}>🗑️</button>
-                 </div>
-               </div>
-             ))}
-           </div>
-           
-           <div style={{borderTop: '1px solid var(--border)', paddingTop: '1.5rem'}}>
-             <h4 style={{fontSize: '0.9rem', marginBottom: '1rem'}}>+ Tambah Template Baru</h4>
-             <form onSubmit={addTemplate} style={{display: 'flex', flexDirection: 'column', gap: '0.75rem'}}>
-                <input 
-                  type="text" 
-                  placeholder="Judul (Cth: Minta Review)" 
-                  value={newTemplateTitle}
-                  onChange={(e) => setNewTemplateTitle(e.target.value)}
-                  style={{fontSize: '0.8rem', padding: '0.6rem'}}
-                />
-                <textarea 
-                  placeholder="Isi pesan lengkap..." 
-                  value={newTemplateText}
-                  onChange={(e) => setNewTemplateText(e.target.value)}
-                  style={{fontSize: '0.8rem', padding: '0.6rem', height: '80px', resize: 'vertical'}}
-                />
-                <button type="submit" className="secondary" style={{fontSize: '0.85rem', padding: '0.6rem'}}>Simpan Template</button>
-             </form>
-           </div>
+                  </>
+                )}
+              </div>
+            ))
+          )}
         </div>
-        
       </div>
     </div>
   );
