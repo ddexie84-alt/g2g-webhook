@@ -16,10 +16,6 @@ export default function ChatTab() {
   const [newTemplateTitle, setNewTemplateTitle] = useState('');
   const [newTemplateText, setNewTemplateText] = useState('');
 
-  useEffect(() => {
-    fetchChats();
-  }, []);
-
   const fetchChats = async () => {
     setLoading(true);
     try {
@@ -33,6 +29,12 @@ export default function ChatTab() {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchChats();
+  }, []);
+
 
   const sendReply = async (textToSend, e = null) => {
     if (e) e.preventDefault();
@@ -100,12 +102,12 @@ export default function ChatTab() {
         {/* Chat List (Left Column) */}
         <div style={{ width: '300px', borderRight: '1px solid var(--border)', overflowY: 'auto', paddingRight: '1rem' }}>
            <h3 style={{fontSize: '1rem', marginBottom: '1rem'}}>Inbox</h3>
-           {messages.length === 0 ? (
+           {(!Array.isArray(messages) || messages.length === 0) ? (
              <div className="empty-state" style={{ padding: '2rem 1rem' }}>
                Belum ada pesan masuk hari ini.
              </div>
            ) : (
-             messages.map((chat, idx) => (
+             (Array.isArray(messages) ? messages : []).map((chat, idx) => (
                <div 
                  key={idx} 
                  onClick={() => setSelectedConversation(chat)}

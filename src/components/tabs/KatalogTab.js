@@ -55,11 +55,11 @@ export default function KatalogTab({ g2gProducts, isFetchingProducts, fetchG2gPr
       
       {isFetchingProducts ? (
         <div className="empty-state">Menarik data dari API G2G...</div>
-      ) : g2gProducts.length === 0 ? (
+      ) : (!Array.isArray(g2gProducts) || g2gProducts.length === 0) ? (
         <div className="empty-state">Katalog Kosong. Tekan Refresh.</div>
       ) : (
         <div className="metrics-grid">
-          {g2gProducts.map(p => (
+          {(Array.isArray(g2gProducts) ? g2gProducts : []).map(p => (
             <div key={p.id} className="metric-card" style={{borderLeft: '4px solid var(--accent)', display: 'flex', flexDirection: 'column'}}>
               <div style={{flex: 1}}>
                 <div style={{fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>

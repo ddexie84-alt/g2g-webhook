@@ -4,10 +4,6 @@ export default function FinanceTab() {
   const [financeData, setFinanceData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchFinance();
-  }, []);
-
   const fetchFinance = async () => {
     setLoading(true);
     try {
@@ -17,10 +13,15 @@ export default function FinanceTab() {
         setFinanceData(data.finance);
       }
     } catch (error) {
-      console.error("Failed to fetch finance data");
+      console.error("Failed to fetch finance");
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchFinance();
+  }, []);
 
   if (loading) {
     return <div className="card empty-state">⏳ Sedang menghubungi Bank G2G...</div>;

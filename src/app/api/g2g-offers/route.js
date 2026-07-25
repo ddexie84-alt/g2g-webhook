@@ -74,7 +74,7 @@ export async function PATCH(req) {
 
     const payload = {};
     if (price !== undefined) payload.unit_price = Number(price);
-    if (stock !== undefined) payload.api_qty = Number(stock);
+    if (stock !== undefined) payload.stock = Number(stock);
     if (status !== undefined) payload.status = parseInt(status, 10);
     // G2G V2 uses status 1 for Active, 0 for Inactive
 
