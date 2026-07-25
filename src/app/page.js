@@ -4,6 +4,7 @@ import Sidebar from "../components/Sidebar";
 import KatalogTab from "../components/tabs/KatalogTab";
 import ChatTab from "../components/tabs/ChatTab";
 import FinanceTab from "../components/tabs/FinanceTab";
+import BulkUploadTab from "../components/tabs/BulkUploadTab";
 
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -487,6 +488,7 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === 'katalog' && <KatalogTab g2gProducts={g2gProducts} isFetchingProducts={isFetchingProducts} fetchG2gProducts={fetchG2gProducts} />}
+        {activeTab === 'bulk' && <BulkUploadTab />}
         {activeTab === 'chat' && <ChatTab />}
         {activeTab === 'finance' && <FinanceTab />}
 
