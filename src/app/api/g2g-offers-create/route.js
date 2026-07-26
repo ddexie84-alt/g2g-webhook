@@ -17,7 +17,7 @@ function generateG2GHeaders(path, apiKey, userId, secretKey, method = 'POST') {
 
 export async function POST(req) {
   try {
-    const { productId, title, price, stock } = await req.json();
+    const { productId, title, price, stock, description } = await req.json();
 
     if (!productId || !title || !price || !stock) {
       return NextResponse.json({ error: 'Data produk tidak lengkap.' }, { status: 400 });
@@ -37,10 +37,10 @@ export async function POST(req) {
     const payload = {
       product_id: productId,
       title: title,
-      price: price.toString(),
+      unit_price: parseFloat(price),
       stock: parseInt(stock, 10),
       currency: 'USD',
-      description: 'Auto-generated offer via Vercel Seller Dashboard'
+      description: description || 'Auto-generated offer via Vercel Seller Dashboard'
     };
 
     const response = await fetch(`https://open-api.g2g.com${path}`, {

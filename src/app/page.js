@@ -4,7 +4,7 @@ import Sidebar from "../components/Sidebar";
 import KatalogTab from "../components/tabs/KatalogTab";
 import ChatTab from "../components/tabs/ChatTab";
 import FinanceTab from "../components/tabs/FinanceTab";
-import BulkUploadTab from "../components/tabs/BulkUploadTab";
+import EtalaseTab from "../components/tabs/EtalaseTab";
 
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -28,10 +28,6 @@ export default function AdminDashboard() {
   // Offers (Etalase)
   const [g2gOffers, setG2gOffers] = useState([]);
   const [isFetchingOffers, setIsFetchingOffers] = useState(false);
-  const [editingOffer, setEditingOffer] = useState(null);
-  const [editOfferPrice, setEditOfferPrice] = useState("");
-  const [editOfferStock, setEditOfferStock] = useState("");
-  const [updatingOfferId, setUpdatingOfferId] = useState(null);
 
   // SMM Services
   const [smmServices, setSmmServices] = useState([]);
@@ -41,7 +37,6 @@ export default function AdminDashboard() {
   const [isFetchingProducts, setIsFetchingProducts] = useState(false);
   const [bulkStockStatus, setBulkStockStatus] = useState("");
 
-  const [categoryFilter, setCategoryFilter] = useState('All');
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -173,26 +168,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const updateOffer = async (offerId, updates) => {
-    setUpdatingOfferId(offerId);
-    try {
-      const res = await fetch('/api/g2g-offers', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ offerId, ...updates })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setEditingOffer(null);
-        fetchG2gOffers();
-      } else {
-        alert("Gagal update: " + data.error);
-      }
-    } catch (e) {
-      alert("Gagal update offer");
-    }
-    setUpdatingOfferId(null);
-  };
+
 
   if (!isAuthenticated) {
     return (
@@ -376,119 +352,10 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {activeTab === 'etalase' && (
-          <div className="card">
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem'}}>
-              <div>
-                <h2 style={{margin: 0}}>🏪 Manajemen Etalase (Live G2G)</h2>
-                <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem'}}>
-                  Pantau, Ubah Harga, Ubah Stok, Pause/Play etalase Anda yang sedang tayang di G2G.
-                </p>
-              </div>
-              <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
-                <button onClick={fetchG2gOffers} disabled={isFetchingOffers} className="secondary">
-                  {isFetchingOffers ? '⏳ Sinkronisasi...' : '🔄 Segarkan'}
-                </button>
-              </div>
-            </div>
-
-            <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', overflowX: 'auto', paddingBottom: '0.5rem'}}>
-              {['All', 'Active', 'Inactive'].map(cat => (
-                 <button key={cat} onClick={() => setCategoryFilter(cat)} className={categoryFilter === cat ? 'primary' : 'secondary'} style={{padding: '0.4rem 1rem', fontSize: '0.85rem', borderRadius: '20px', whiteSpace: 'nowrap'}}>
-                    {cat}
-                 </button>
-              ))}
-            </div>
-
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Offer ID</th>
-                    <th>Judul Etalase</th>
-                    <th>Harga (USD)</th>
-                    <th>Stok Tersedia</th>
-                    <th>Status Live</th>
-                    <th style={{textAlign: 'right'}}>Aksi Cepat</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isFetchingOffers ? (
-                    <tr><td colSpan="6" className="empty-state">Menarik data etalase dari API G2G...</td></tr>
-                  ) : (!Array.isArray(g2gOffers) || g2gOffers.length === 0) ? (
-                    <tr><td colSpan="6" className="empty-state">Etalase kosong atau Gagal menarik data.</td></tr>
-                  ) : (
-                    g2gOffers.filter(o => {
-                      if (!o) return false;
-                      const rawStatus = o.offer_status ?? o.status ?? o.active ?? o.display ?? 'unknown';
-                      const isActive = String(rawStatus).toLowerCase() === 'active' || String(rawStatus).toLowerCase() === 'live' || String(rawStatus).toLowerCase() === 'online' || rawStatus === 1 || rawStatus === true;
-                      
-                      if (categoryFilter === 'Active') return isActive;
-                      if (categoryFilter === 'Inactive') return !isActive;
-                      return true;
-                    }).map((o, idx) => {
-                      const id = o.offer_id || o.id;
-                      const rawStatus = o.offer_status ?? o.status ?? o.active ?? o.display ?? 'unknown';
-                      const isActive = String(rawStatus).toLowerCase() === 'active' || String(rawStatus).toLowerCase() === 'live' || String(rawStatus).toLowerCase() === 'online' || rawStatus === 1 || rawStatus === true;
-                      
-                      return (
-                        <tr key={id || idx}>
-                          <td style={{fontFamily: 'monospace', color: 'var(--accent)'}}>{id}</td>
-                          <td>{o.offer_title || o.title || 'Penawaran G2G'}</td>
-                          <td>
-                            {editingOffer === id ? (
-                              <input type="number" step="0.01" value={editOfferPrice} onChange={(e) => setEditOfferPrice(e.target.value)} style={{ width: '80px', padding: '0.2rem' }} />
-                            ) : (
-                              `${o.offer_currency || o.currency || 'USD'} ${o.unit_price || o.price}`
-                            )}
-                          </td>
-                          <td>
-                            {editingOffer === id ? (
-                              <input type="number" value={editOfferStock} onChange={(e) => setEditOfferStock(e.target.value)} style={{ width: '60px', padding: '0.2rem' }} />
-                            ) : (
-                              o.available_qty || o.api_qty || o.stock || 0
-                            )}
-                          </td>
-                          <td>
-                            <span style={{
-                              padding: '0.2rem 0.5rem', 
-                              borderRadius: '4px', 
-                              fontSize: '0.8rem',
-                              backgroundColor: isActive ? '#d1fae5' : '#fee2e2',
-                              color: isActive ? '#047857' : '#b91c1c'
-                            }}>
-                              {isActive ? 'Aktif' : 'Nonaktif'}
-                            </span>
-                          </td>
-                          <td style={{textAlign: 'right'}}>
-                            {editingOffer === id ? (
-                              <div style={{display: 'flex', gap: '4px', justifyContent: 'flex-end'}}>
-                                <button onClick={() => updateOffer(id, { price: editOfferPrice, stock: editOfferStock })} disabled={updatingOfferId === id} style={{padding: '0.3rem', fontSize: '0.8rem'}}>
-                                  {updatingOfferId === id ? '⏳' : 'Simpan'}
-                                </button>
-                                <button onClick={() => setEditingOffer(null)} className="danger" style={{padding: '0.3rem', fontSize: '0.8rem'}}>Batal</button>
-                              </div>
-                            ) : (
-                              <div style={{display: 'flex', gap: '4px', justifyContent: 'flex-end'}}>
-                                <button onClick={() => updateOffer(id, { status: isActive ? 0 : 1 })} disabled={updatingOfferId === id} style={{padding: '0.3rem', fontSize: '0.8rem', backgroundColor: isActive ? '#f59e0b' : '#10b981', color: 'white', border: 'none'}}>
-                                  {updatingOfferId === id ? '...' : (isActive ? '⏸️ Pause' : '▶️ Play')}
-                                </button>
-                                <button onClick={() => { setEditingOffer(id); setEditOfferPrice(o.unit_price || o.price); setEditOfferStock(o.available_qty || o.api_qty || o.stock || 0); }} style={{padding: '0.3rem', fontSize: '0.8rem'}} className="secondary">Ubah</button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        {activeTab === 'etalase' && <EtalaseTab g2gOffers={g2gOffers} isFetchingOffers={isFetchingOffers} fetchG2gOffers={fetchG2gOffers} />}
 
         {activeTab === 'katalog' && <KatalogTab g2gProducts={g2gProducts} isFetchingProducts={isFetchingProducts} fetchG2gProducts={fetchG2gProducts} />}
-        {activeTab === 'bulk' && <BulkUploadTab />}
+
         {activeTab === 'chat' && <ChatTab />}
         {activeTab === 'finance' && <FinanceTab />}
 

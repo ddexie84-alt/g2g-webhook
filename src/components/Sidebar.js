@@ -21,9 +21,7 @@ export default function Sidebar({ activeTab, setActiveTab, fetchG2gOffers }) {
         <button className={`nav-item ${activeTab === 'katalog' ? 'active' : ''}`} onClick={() => setActiveTab('katalog')}>
           📚 Katalog G2G (Beta)
         </button>
-        <button className={`nav-item ${activeTab === 'bulk' ? 'active' : ''}`} onClick={() => setActiveTab('bulk')}>
-          🚀 Upload Massal Akun
-        </button>
+
         <button className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>
           💬 Pesan Pembeli
         </button>
